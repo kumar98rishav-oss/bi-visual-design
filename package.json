@@ -1,0 +1,25 @@
+{
+  "name": "bi-visual-design",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "File-based design mirror & editor for Power BI reports (PBIR). Restyle themes, layout and graphics, then deploy back to disk. Cannot see your data.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b --noEmit",
+    "verify:pbir": "node --experimental-strip-types scripts/verify-pbir.ts"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  }
+}
