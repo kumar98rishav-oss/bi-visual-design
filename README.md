@@ -17,7 +17,7 @@ Desktop canvas — so instead of a bridge, this tool reads and writes those file
 directly through the browser's File System Access API. Nothing is installed and
 nothing runs in the background.
 
-## Status — Milestone 1 (mirror) ✅ · Milestone 2 (Theme Lab) ✅
+## Status — Milestone 1 (mirror) ✅ · Milestone 2 (Theme Lab) ✅ · Milestone 3 (Layout Lab) ✅
 
 **Mirror**
 - **PBIR core** — expression-tree read/write, report/page/visual parser, active
@@ -43,13 +43,22 @@ nothing runs in the background.
   `textClasses`, `visualStyles` and structural colours round-trip untouched
   (verified against the real theme).
 
+**Layout Lab**
+- A third mode that makes the mirror interactive: **click / shift-click** to
+  select, **drag** to move (with grid + smart-guide snapping), **8 resize
+  handles**, and **arrow-key nudge** (Shift = ×10).
+- **Align** (6 edges), **distribute** (equal gaps), and **match size** across a
+  multi-selection; **numeric X/Y/W/H** editing; **undo/redo**.
+- **Deploy** writes each moved visual's `position` back to its `visual.json`
+  (backup + JSON validation); z-order, tab order and everything else round-trip
+  untouched.
+
 ### Not yet built (next up)
 
-1. **Typography & per-visual-type styles** in Theme Lab (textClasses /
-   visualStyles editing).
-2. **Layout Lab** — drag/resize/align/distribute/snap; write positions back.
-3. **Design Doctor** — a design linter (misalignments, off-palette colours,
+1. **Design Doctor** — a design linter (misalignments, off-palette colours,
    mixed fonts, inconsistent radii) with one-click fixes.
+2. **Typography & per-visual-type styles** in Theme Lab (textClasses /
+   visualStyles editing).
 
 ## Requirements
 
