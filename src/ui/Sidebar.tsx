@@ -1,12 +1,14 @@
-import type { ReportModel } from '../pbir/types.ts'
+import type { ReportModel, Theme } from '../pbir/types.ts'
 
 interface Props {
   report: ReportModel | null
+  /** Effective theme (may be a live Theme Lab draft) for the swatch strip. */
+  theme: Theme | null
   activePageId: string | null
   onSelectPage: (id: string) => void
 }
 
-export function Sidebar({ report, activePageId, onSelectPage }: Props) {
+export function Sidebar({ report, theme, activePageId, onSelectPage }: Props) {
   return (
     <nav className="sidebar">
       <div className="sidebar-head">Pages</div>
@@ -26,11 +28,11 @@ export function Sidebar({ report, activePageId, onSelectPage }: Props) {
         {!report && <li className="muted">No report loaded</li>}
       </ul>
 
-      {report?.theme && (
+      {theme && (
         <div className="theme-strip">
-          <div className="sidebar-head">Theme · {report.theme.name}</div>
+          <div className="sidebar-head">Theme · {theme.name}</div>
           <div className="swatches">
-            {report.theme.dataColors.slice(0, 16).map((c, i) => (
+            {theme.dataColors.slice(0, 16).map((c, i) => (
               <span key={i} className="swatch" style={{ background: c }} title={c} />
             ))}
           </div>

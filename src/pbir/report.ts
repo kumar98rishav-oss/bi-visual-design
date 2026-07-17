@@ -191,19 +191,97 @@ async function loadPage(fp: FileProvider, pagesDir: string, pageId: string): Pro
 // Theme
 // ---------------------------------------------------------------------------
 
-async function loadTheme(fp: FileProvider): Promise<Theme | null> {
-  // v1: the user's working custom theme sits as Theme.json at the project root.
-  // (Registered report themes under StaticResources are handled later.)
+function str(v: Json): string | undefined {
+  return typeof v === 'string' ? v : undefined
+}
+
+function dataColorsOf(raw: JsonObject): string[] {
+  return Array.isArray(raw.dataColors) ? raw.dataColors.filter((c): c is string => typeof c === 'string') : []
+}
+
+/**
+ * Resolve a resource item's path to a file location under the report's
+ * StaticResources. SharedResources (base + built-in themes) and
+ * RegisteredResources (user-uploaded custom themes) live in different subtrees.
+ */
+function resourceFilePath(packageType: string, itemPath: string): string {
+  const subtree = packageType === 'RegisteredResources' ? 'RegisteredResources' : 'SharedResources'
+  return `StaticResources/${subtree}/${itemPath}`
+}
+
+/**
+ * Look up a theme resource's report-relative path by its declared name in
+ * report.json. Returns a path like "StaticResources/SharedResources/...".
+ */
+function findThemePath(reportRaw: JsonObject | null, themeName: string): { path: string; packageName: string } | null {
+  if (!reportRaw || !Array.isArray(reportRaw.resourcePackages)) return null
+  for (const pkg of reportRaw.resourcePackages) {
+    if (!isObj(pkg) || !Array.isArray(pkg.items)) continue
+    const packageType = str(pkg.type) ?? 'SharedResources'
+    for (const item of pkg.items) {
+      if (isObj(item) && str(item.name) === themeName && str(item.path)) {
+        return { path: resourceFilePath(packageType, str(item.path)!), packageName: str(pkg.name) ?? packageType }
+      }
+    }
+  }
+  return null
+}
+
+/**
+ * Load the ACTIVE theme the report renders with. Power BI declares a
+ * themeCollection in report.json (baseTheme + optional customTheme) that points
+ * into StaticResources. The effective palette is the custom theme merged over
+ * the base. We keep the custom theme's raw as the deploy target so edits
+ * round-trip its textClasses/visualStyles. Falls back to a root Theme.json.
+ */
+async function loadTheme(fp: FileProvider, reportDir: string, reportRaw: JsonObject | null): Promise<Theme | null> {
+  const themeCollection = reportRaw && isObj(reportRaw.themeCollection) ? reportRaw.themeCollection : null
+
+  const baseName = themeCollection && isObj(themeCollection.baseTheme) ? str(themeCollection.baseTheme.name) : undefined
+  const customName =
+    themeCollection && isObj(themeCollection.customTheme) ? str(themeCollection.customTheme.name) : undefined
+
+  const readThemeByName = async (name: string | undefined): Promise<{ raw: JsonObject; loc: { path: string; packageName: string } } | null> => {
+    if (!name) return null
+    const loc = findThemePath(reportRaw, name)
+    if (!loc) return null
+    const raw = parseJson(await fp.readText(`${reportDir}/${loc.path}`))
+    return raw ? { raw, loc } : null
+  }
+
+  const base = await readThemeByName(baseName)
+  const custom = await readThemeByName(customName)
+
+  // The active layer we edit/deploy is the custom theme if present, else base.
+  const active = custom ?? base
+  if (active) {
+    // Effective palette: the custom theme's colours if it defines them,
+    // otherwise the base theme's. We edit/deploy the active layer's raw.
+    const mergedColors = dataColorsOf(active.raw).length ? dataColorsOf(active.raw) : dataColorsOf(base?.raw ?? {})
+    return {
+      name: str(active.raw.name) ?? customName ?? baseName ?? 'Theme',
+      dataColors: mergedColors,
+      background: str(active.raw.background) ?? str(base?.raw.background),
+      foreground: str(active.raw.foreground) ?? str(base?.raw.foreground),
+      tableAccent: str(active.raw.tableAccent) ?? str(base?.raw.tableAccent),
+      raw: active.raw,
+      source: { kind: 'registered', path: `${reportDir}/${active.loc.path}`, packageName: active.loc.packageName },
+      baseName: custom ? baseName : undefined,
+    }
+  }
+
+  // Fallback: a Theme.json sitting next to the project (an imported source file).
   for (const candidate of ['Theme.json', 'theme.json']) {
     const raw = parseJson(await fp.readText(candidate))
     if (raw && Array.isArray(raw.dataColors)) {
       return {
-        name: typeof raw.name === 'string' ? raw.name : 'Custom theme',
-        dataColors: raw.dataColors.filter((c): c is string => typeof c === 'string'),
-        background: typeof raw.background === 'string' ? raw.background : undefined,
-        foreground: typeof raw.foreground === 'string' ? raw.foreground : undefined,
-        tableAccent: typeof raw.tableAccent === 'string' ? raw.tableAccent : undefined,
+        name: str(raw.name) ?? 'Custom theme',
+        dataColors: dataColorsOf(raw),
+        background: str(raw.background),
+        foreground: str(raw.foreground),
+        tableAccent: str(raw.tableAccent),
         raw,
+        source: { kind: 'rootFile', path: candidate },
       }
     }
   }
@@ -247,11 +325,13 @@ export async function loadReport(fp: FileProvider, reportName = 'Report'): Promi
     if (page) pages.push(page)
   }
 
+  const reportRaw = parseJson(await fp.readText(`${defDir}/report.json`))
+
   return {
     reportName,
     pagesMeta,
     pages,
-    theme: await loadTheme(fp),
-    reportRaw: parseJson(await fp.readText(`${defDir}/report.json`)),
+    theme: await loadTheme(fp, reportDir, reportRaw),
+    reportRaw,
   }
 }

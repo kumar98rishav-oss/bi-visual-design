@@ -110,15 +110,29 @@ export interface PageNode {
   schema?: string
 }
 
-/** A Power BI theme file (Theme.json). Only the fields we edit are typed. */
+/** How the active theme was located, which determines where a deploy writes. */
+export type ThemeSource =
+  | { kind: 'registered'; path: string; packageName: string } // inside <Report>/StaticResources/...
+  | { kind: 'rootFile'; path: string } // a Theme.json next to the project
+  | { kind: 'none' } // synthesized default; nowhere to write yet
+
+/** A Power BI theme. Only the fields we edit are typed; the rest round-trips. */
 export interface Theme {
   name: string
+  /** Effective palette (custom theme merged over base). ColorId N -> [N-1]. */
   dataColors: string[]
   background?: string
   foreground?: string
   tableAccent?: string
-  /** Everything else in the theme, preserved on write. */
+  /**
+   * The raw JSON of the theme we would WRITE on deploy — i.e. the custom theme
+   * layer, not the merged view. Preserves textClasses/visualStyles/etc.
+   */
   raw: JsonObject
+  /** Where this theme lives, for deploy. */
+  source: ThemeSource
+  /** Base theme name we merged under the custom theme, if any (for display). */
+  baseName?: string
 }
 
 export interface ReportModel {

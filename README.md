@@ -17,10 +17,11 @@ Desktop canvas — so instead of a bridge, this tool reads and writes those file
 directly through the browser's File System Access API. Nothing is installed and
 nothing runs in the background.
 
-## Status — Milestone 1 (mirror) ✅
+## Status — Milestone 1 (mirror) ✅ · Milestone 2 (Theme Lab) ✅
 
-- **PBIR core** — expression-tree read/write, report/page/visual parser, theme
-  parsing. Verified against a real 12-page / 94-visual report
+**Mirror**
+- **PBIR core** — expression-tree read/write, report/page/visual parser, active
+  theme resolution. Verified against a real 12-page / 94-visual report
   (`npm run verify:pbir`).
 - **Mirror renderer** — pages at their exact native size, every visual placed at
   its sub-pixel PBIR position with title/background/border chrome and
@@ -28,14 +29,24 @@ nothing runs in the background.
   (the files carry bindings, not data — the designer works with "lorem ipsum").
 - **Page navigation + inspector** — per-page nav, click any visual to inspect
   its geometry and field bindings.
-- **Safe write-back plumbing** — every deploy backs up the exact files it
-  changes and refuses to write invalid JSON. (Wired for the coming Theme Lab.)
+
+**Theme Lab**
+- Resolves the **active** report theme from `report.json`'s `themeCollection`
+  (custom theme merged over the base), not a stray imported `Theme.json`.
+- Edit the data-colour palette and structural colours (background / foreground /
+  table accent). Every edit re-colours the whole mirror **live**.
+- **Colour-harmony generator** (analogous, complementary, split, triadic,
+  tetradic, monochromatic) and a **preset gallery**.
+- **A/B compare** — original vs edited, side by side.
+- **Deploy** writes the edited theme back to its file in `StaticResources`,
+  backing up the prior copy first and validating JSON. Colours change;
+  `textClasses`, `visualStyles` and structural colours round-trip untouched
+  (verified against the real theme).
 
 ### Not yet built (next up)
 
-1. **Theme Lab** — palette editing, colour-harmony generation, typography,
-   per-visual-type styles; preview across all pages; deploy the theme (one
-   file, low risk, big payoff).
+1. **Typography & per-visual-type styles** in Theme Lab (textClasses /
+   visualStyles editing).
 2. **Layout Lab** — drag/resize/align/distribute/snap; write positions back.
 3. **Design Doctor** — a design linter (misalignments, off-palette colours,
    mixed fonts, inconsistent radii) with one-click fixes.

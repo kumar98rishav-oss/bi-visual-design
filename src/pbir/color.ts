@@ -43,17 +43,20 @@ export function shade(hex: string, percent: number): string {
   )
 }
 
-/** Standard Power BI theme slots (ColorId 1..8 map to these before dataColors). */
+/**
+ * Resolve a theme ColorId to a base hex. In Power BI the format-pane color
+ * picker exposes the theme's palette as "Theme color 1..N", and a pick is
+ * stored as `ThemeDataColor{ColorId}` — 1-based into the dataColors array
+ * (ColorId 1 -> dataColors[0]). Verified against a real report: only ColorId
+ * values >= 1 ever appear, and structural colors use their own fields, so we
+ * index dataColors directly and wrap defensively if out of range.
+ */
 function themeSlotHex(theme: Theme | null, colorId: number): string {
-  if (!theme) return '#888888'
-  // ColorId is 1-based. Power BI's first palette entries are the named theme
-  // colors; from index 1 it flows into dataColors. We map pragmatically:
-  //   1 -> foreground, 2 -> background, 3.. -> dataColors, with a fallback.
-  if (colorId === 1 && theme.foreground) return theme.foreground
-  if (colorId === 2 && theme.background) return theme.background
+  const palette = theme?.dataColors ?? []
+  if (palette.length === 0) return '#888888'
   const idx = colorId - 1
-  if (idx >= 0 && idx < theme.dataColors.length) return theme.dataColors[idx]
-  return theme.dataColors[(Math.max(0, colorId - 1)) % Math.max(1, theme.dataColors.length)] ?? '#888888'
+  if (idx >= 0 && idx < palette.length) return palette[idx]
+  return palette[((idx % palette.length) + palette.length) % palette.length] ?? '#888888'
 }
 
 /** Resolve any {@link ColorValue} to a concrete hex, given the active theme. */

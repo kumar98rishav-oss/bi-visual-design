@@ -4,21 +4,32 @@ interface Props {
   report: ReportModel | null
   busy: boolean
   canOpen: boolean
+  view: 'mirror' | 'theme'
+  onViewChange: (v: 'mirror' | 'theme') => void
   onOpenFolder: () => void
   onLoadSample: () => void
 }
 
-export function Topbar({ report, busy, canOpen, onOpenFolder, onLoadSample }: Props) {
+export function Topbar({ report, busy, canOpen, view, onViewChange, onOpenFolder, onLoadSample }: Props) {
   return (
     <header className="topbar">
       <div className="brand">
-        <span className="logo" aria-hidden>◑</span>
+        <span className="logo" aria-hidden>
+          ◑
+        </span>
         <div>
           <div className="brand-name">BI Visual Design</div>
-          <div className="brand-sub">
-            {report ? report.reportName : 'File-based design mirror for Power BI'}
-          </div>
+          <div className="brand-sub">{report ? report.reportName : 'File-based design mirror for Power BI'}</div>
         </div>
+      </div>
+
+      <div className="viewtabs" role="tablist">
+        <button className={`viewtab${view === 'mirror' ? ' active' : ''}`} onClick={() => onViewChange('mirror')} role="tab" aria-selected={view === 'mirror'}>
+          Mirror
+        </button>
+        <button className={`viewtab${view === 'theme' ? ' active' : ''}`} onClick={() => onViewChange('theme')} role="tab" aria-selected={view === 'theme'}>
+          Theme Lab
+        </button>
       </div>
 
       <div className="topbar-meta">

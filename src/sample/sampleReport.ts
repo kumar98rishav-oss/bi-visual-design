@@ -3,7 +3,7 @@
 // run through the actual parser, so the sample exercises the same code path as
 // a real folder. Nothing here is user data — it's a fictional sales report.
 
-import { makeLiteral, makeThemeColor } from '../pbir/exprTree.ts'
+import { makeLiteral, makeLiteralColor, makeThemeColor } from '../pbir/exprTree.ts'
 import type { JsonObject } from '../pbir/types.ts'
 
 const SCHEMA = {
@@ -35,13 +35,15 @@ interface VisualSpec {
 function visualJson(spec: VisualSpec): JsonObject {
   const vco: JsonObject = {}
   if (spec.title) {
+    const hasBar = spec.title.themeBg != null
     vco.title = [
       {
         properties: {
           show: makeLiteral(true),
           text: makeLiteral(spec.title.text),
-          fontColor: makeThemeColor(spec.title.color ?? 1, 0),
-          ...(spec.title.themeBg != null ? { background: makeThemeColor(spec.title.themeBg, 0.4) } : {}),
+          // White text reads on a coloured bar; otherwise a theme colour.
+          fontColor: hasBar ? makeLiteralColor('#FFFFFF') : makeThemeColor(spec.title.color ?? 1, 0),
+          ...(hasBar ? { background: makeThemeColor(spec.title.themeBg!, 0) } : {}),
           alignment: makeLiteral('center'),
           fontSize: makeLiteral(14),
         },
@@ -85,8 +87,8 @@ function groupJson(id: string, name: string, x: number, y: number, w: number, h:
 
 // --- Page 1: Overview ------------------------------------------------------
 const page1Visuals: VisualSpec[] = [
-  { id: 'v_hdr', type: 'textbox', x: 24, y: 16, w: 1232, h: 48, title: { text: 'Quarterly Sales Overview', themeBg: 2, radius: 8, color: 2 } },
-  { id: 'v_kpi1', type: 'card', x: 24, y: 84, w: 292, h: 120, title: { text: 'Revenue', themeBg: 0, radius: 12 }, projections: [{ role: 'Values', field: measure('_Measures', 'Total Revenue') }] },
+  { id: 'v_hdr', type: 'textbox', x: 24, y: 16, w: 1232, h: 48, title: { text: 'Quarterly Sales Overview', themeBg: 2, radius: 8 } },
+  { id: 'v_kpi1', type: 'card', x: 24, y: 84, w: 292, h: 120, title: { text: 'Revenue', themeBg: 1, radius: 12 }, projections: [{ role: 'Values', field: measure('_Measures', 'Total Revenue') }] },
   { id: 'v_kpi2', type: 'card', x: 336, y: 84, w: 292, h: 120, title: { text: 'Orders', themeBg: 3, radius: 12 }, projections: [{ role: 'Values', field: measure('_Measures', 'Order Count') }] },
   { id: 'v_kpi3', type: 'card', x: 648, y: 84, w: 292, h: 120, title: { text: 'Avg Basket', themeBg: 4, radius: 12 }, projections: [{ role: 'Values', field: measure('_Measures', 'Avg Basket') }] },
   { id: 'v_kpi4', type: 'card', x: 960, y: 84, w: 296, h: 120, title: { text: 'Margin %', themeBg: 5, radius: 12 }, projections: [{ role: 'Values', field: measure('_Measures', 'Margin Pct') }] },
