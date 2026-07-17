@@ -29,7 +29,7 @@ export function PageCanvas({ page, theme, scale, selectedVisualId, onSelectVisua
           width: page.width,
           height: page.height,
           transform: `scale(${scale})`,
-          background: chrome.background ?? 'var(--page-bg)',
+          background: chrome.background ?? 'var(--art-page-bg)',
         }}
       >
         {page.visuals.map((v) => (

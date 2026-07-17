@@ -1,6 +1,8 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
+import './design/tokens.css'
+import './design/landing.css'
 import './styles.css'
 
 const rootEl = document.getElementById('root')

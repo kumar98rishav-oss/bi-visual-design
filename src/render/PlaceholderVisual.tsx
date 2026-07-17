@@ -113,7 +113,7 @@ export function PlaceholderVisual({ visual, theme, width, height }: Props) {
     return (
       <svg className="ph" width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
         {arcs}
-        {isDonut && <circle cx={cx} cy={cy} r={r * 0.55} fill="var(--surface)" />}
+        {isDonut && <circle cx={cx} cy={cy} r={r * 0.55} fill="var(--art-surface)" />}
       </svg>
     )
   }
@@ -133,7 +133,7 @@ export function PlaceholderVisual({ visual, theme, width, height }: Props) {
     const frac = 0.4 + (seed % 1) * 0.4
     return (
       <svg className="ph" width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-        <path d={arc(Math.PI, 2 * Math.PI)} fill="none" stroke="var(--track)" strokeWidth={12} strokeLinecap="round" />
+        <path d={arc(Math.PI, 2 * Math.PI)} fill="none" stroke="var(--art-track)" strokeWidth={12} strokeLinecap="round" />
         <path d={arc(Math.PI, Math.PI + Math.PI * frac)} fill="none" stroke={c0} strokeWidth={12} strokeLinecap="round" />
       </svg>
     )

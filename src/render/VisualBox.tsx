@@ -30,12 +30,12 @@ export function VisualBox({ visual, theme, selected, onSelect }: Props) {
     height: position.height,
     zIndex: position.z,
     borderRadius: chrome.border.radius || (isGroup ? 0 : 4),
-    background: isGroup ? 'transparent' : chrome.background ?? 'var(--surface)',
+    background: isGroup ? 'transparent' : chrome.background ?? 'var(--art-surface)',
     border: isGroup
-      ? '1.5px dashed var(--group-border)'
+      ? '1.5px dashed var(--art-group-border)'
       : chrome.border.show
-        ? `1px solid ${chrome.border.color ?? 'var(--visual-border)'}`
-        : '1px solid var(--visual-border)',
+        ? `1px solid ${chrome.border.color ?? 'var(--art-border)'}`
+        : '1px solid var(--art-border)',
   }
 
   return (

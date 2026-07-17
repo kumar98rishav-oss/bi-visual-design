@@ -6,19 +6,19 @@ import { buildSampleFiles, SAMPLE_REPORT_NAME } from './sample/sampleReport.ts'
 import { isFileSystemAccessSupported, openProjectFolder } from './pbir/fs.ts'
 import { deployTheme } from './theme/deploy.ts'
 import { PageCanvas } from './render/PageCanvas.tsx'
+import { Landing } from './ui/Landing.tsx'
 import { Sidebar } from './ui/Sidebar.tsx'
 import { Inspector } from './ui/Inspector.tsx'
 import { ThemeLab } from './ui/ThemeLab.tsx'
 import { Topbar } from './ui/Topbar.tsx'
 
 const CANVAS_MARGIN = 32
-
 type View = 'mirror' | 'theme'
+type AppTheme = 'light' | 'dark'
 
 function cloneTheme(t: Theme): Theme {
   return { ...t, dataColors: [...t.dataColors] }
 }
-
 function themeFingerprint(t: Theme | null): string {
   if (!t) return ''
   return JSON.stringify([t.dataColors, t.background, t.foreground, t.tableAccent])
@@ -27,12 +27,14 @@ function themeFingerprint(t: Theme | null): string {
 export default function App() {
   const [report, setReport] = useState<ReportModel | null>(null)
   const [handle, setHandle] = useState<FileSystemDirectoryHandle | null>(null)
+  const [atHome, setAtHome] = useState(true)
   const [activePageId, setActivePageId] = useState<string | null>(null)
   const [selectedVisualId, setSelectedVisualId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
+  const [appTheme, setAppTheme] = useState<AppTheme>('dark')
   const [view, setView] = useState<View>('mirror')
   const [themeDraft, setThemeDraft] = useState<Theme | null>(null)
   const [compare, setCompare] = useState(false)
@@ -40,6 +42,11 @@ export default function App() {
 
   const stageRef = useRef<HTMLDivElement>(null)
   const [scale, setScale] = useState(1)
+
+  // Apply the app theme to the document root so tokens switch.
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', appTheme)
+  }, [appTheme])
 
   const activePage = report?.pages.find((p) => p.id === activePageId) ?? report?.pages[0] ?? null
   const effectiveTheme = themeDraft ?? report?.theme ?? null
@@ -53,6 +60,8 @@ export default function App() {
   const adoptReport = useCallback((model: ReportModel, dirHandle: FileSystemDirectoryHandle | null) => {
     setReport(model)
     setHandle(dirHandle)
+    setAtHome(false)
+    setView('mirror')
     setActivePageId(model.pagesMeta.activePageName ?? model.pages[0]?.id ?? null)
     setSelectedVisualId(null)
     setThemeDraft(model.theme ? cloneTheme(model.theme) : null)
@@ -92,10 +101,8 @@ export default function App() {
     setError(null)
     setNotice(null)
     try {
-      // Stable per-deploy stamp (no Date in module scope elsewhere; here is fine).
       const stamp = new Date().toISOString().replace(/[:.]/g, '-')
       const out = await deployTheme(handle, themeDraft, stamp)
-      // Reflect the deployed theme as the new baseline.
       setReport((r) => (r ? { ...r, theme: cloneTheme(themeDraft) } : r))
       setNotice(`Deployed theme to ${out.path}. Backup at ${out.backedUpTo}. Close and reopen the report in Power BI Desktop to see it.`)
     } catch (e) {
@@ -109,9 +116,8 @@ export default function App() {
     if (originalTheme) setThemeDraft(cloneTheme(originalTheme))
   }, [originalTheme])
 
-  // Fit-to-viewport scaling for the active page (accounts for compare split).
   useLayoutEffect(() => {
-    if (!activePage || !stageRef.current) return
+    if (atHome || !activePage || !stageRef.current) return
     const measure = () => {
       const el = stageRef.current
       if (!el) return
@@ -125,11 +131,19 @@ export default function App() {
     const ro = new ResizeObserver(measure)
     ro.observe(stageRef.current)
     return () => ro.disconnect()
-  }, [activePage, compare, view])
+  }, [activePage, compare, view, atHome])
 
-  useEffect(() => {
-    void loadSample()
-  }, [loadSample])
+  // Landing until a report is opened (or the user returns Home).
+  if (atHome || !report) {
+    return (
+      <Landing
+        canOpen={isFileSystemAccessSupported()}
+        busy={busy}
+        onOpenFolder={openFolder}
+        onLoadSample={loadSample}
+      />
+    )
+  }
 
   const selectedVisual = activePage?.visuals.find((v) => v.id === selectedVisualId) ?? null
   const showCompare = compare && view === 'theme' && activePage
@@ -138,12 +152,14 @@ export default function App() {
     <div className="app">
       <Topbar
         report={report}
+        view={view}
+        theme={appTheme}
+        onViewChange={setView}
+        onToggleTheme={() => setAppTheme((t) => (t === 'light' ? 'dark' : 'light'))}
+        onHome={() => setAtHome(true)}
+        onOpenFolder={openFolder}
         busy={busy}
         canOpen={isFileSystemAccessSupported()}
-        view={view}
-        onViewChange={setView}
-        onOpenFolder={openFolder}
-        onLoadSample={loadSample}
       />
 
       {error && (
@@ -173,6 +189,9 @@ export default function App() {
         <main className="stage-wrap">
           <div className="stage-toolbar">
             <span className="stage-page">{activePage ? activePage.displayName : '—'}</span>
+            <span className="stage-dim">
+              {activePage ? `${activePage.width}×${activePage.height}` : ''}
+            </span>
             <span className="stage-zoom">{Math.round(scale * 100)}%</span>
             {view === 'theme' && (
               <label className="stage-compare">
@@ -205,7 +224,7 @@ export default function App() {
               )
             ) : (
               <div className="empty-state">
-                <p>Open a Power BI project folder to mirror its report.</p>
+                <p>This report has no pages.</p>
               </div>
             )}
           </div>
