@@ -1,0 +1,24 @@
+{
+  // Standalone config for the Node verification harness in scripts/.
+  // NOT referenced by tsconfig.json, so the production build (tsc -b) never
+  // compiles it — keeps the deploy free of Node type dependencies while still
+  // letting `npm run typecheck:scripts` check the harness locally.
+  "compilerOptions": {
+    "target": "ES2022",
+    // DOM is needed because the harness imports src/ modules that reference
+    // browser types (FileSystemDirectoryHandle) in type positions.
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "strict": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["scripts"]
+}
