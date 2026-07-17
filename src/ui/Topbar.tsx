@@ -1,7 +1,7 @@
-import { Palette, ChevronRight, Home, Sun, Moon, FolderOpen, Eye, SlidersHorizontal, Move } from 'lucide-react'
+import { Palette, ChevronRight, Home, Sun, Moon, FolderOpen, Eye, SlidersHorizontal, Move, Stethoscope } from 'lucide-react'
 import type { ReportModel } from '../pbir/types.ts'
 
-type View = 'mirror' | 'theme' | 'layout'
+type View = 'mirror' | 'theme' | 'layout' | 'doctor'
 
 interface Props {
   report: ReportModel | null
@@ -71,6 +71,14 @@ export function Topbar({ report, view, theme, busy, canOpen, onViewChange, onTog
           aria-selected={view === 'layout'}
         >
           <Move size={14} /> Layout Lab
+        </button>
+        <button
+          className={`segmented__btn${view === 'doctor' ? ' active' : ''}`}
+          onClick={() => onViewChange('doctor')}
+          role="tab"
+          aria-selected={view === 'doctor'}
+        >
+          <Stethoscope size={14} /> Doctor
         </button>
       </div>
 

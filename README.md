@@ -17,7 +17,7 @@ Desktop canvas — so instead of a bridge, this tool reads and writes those file
 directly through the browser's File System Access API. Nothing is installed and
 nothing runs in the background.
 
-## Status — Milestone 1 (mirror) ✅ · Milestone 2 (Theme Lab) ✅ · Milestone 3 (Layout Lab) ✅
+## Status — M1 Mirror ✅ · M2 Theme Lab ✅ · M3 Layout Lab ✅ · M4 Design Doctor ✅
 
 **Mirror**
 - **PBIR core** — expression-tree read/write, report/page/visual parser, active
@@ -53,11 +53,22 @@ nothing runs in the background.
   (backup + JSON validation); z-order, tab order and everything else round-trip
   untouched.
 
+**Design Doctor** — a design linter that audits the report and fixes issues in
+one click:
+- **Near-misalignments** — visuals whose edges are within a few pixels of lining
+  up; snaps them to a shared edge.
+- **Inconsistent corner radii** — an outlier radius among like visuals (cards vs
+  cards); matches it to the set.
+- **Off-palette colours** — a colour that has *drifted* from a theme colour;
+  snaps it back to the palette (intentional custom colours are left alone).
+- **Sub-pixel positions** — rounds fractional coordinates to a whole-pixel grid.
+
+Fixes preview live on the mirror; **Deploy** writes the changed `visual.json`
+files with backup + validation. **Fix all** clears a whole category at once.
+
 ### Not yet built (next up)
 
-1. **Design Doctor** — a design linter (misalignments, off-palette colours,
-   mixed fonts, inconsistent radii) with one-click fixes.
-2. **Typography & per-visual-type styles** in Theme Lab (textClasses /
+1. **Typography & per-visual-type styles** in Theme Lab (textClasses /
    visualStyles editing).
 
 ## Requirements

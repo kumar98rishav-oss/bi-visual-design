@@ -11,7 +11,8 @@
     "typecheck": "tsc -b --noEmit",
     "typecheck:scripts": "tsc -p tsconfig.scripts.json",
     "verify:pbir": "node --experimental-strip-types scripts/verify-pbir.ts",
-    "verify:layout": "node --experimental-strip-types scripts/verify-layout.ts"
+    "verify:layout": "node --experimental-strip-types scripts/verify-layout.ts",
+    "verify:doctor": "node --experimental-strip-types scripts/verify-doctor.ts"
   },
   "dependencies": {
     "lucide-react": "^0.454.0",

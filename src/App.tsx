@@ -7,17 +7,21 @@ import { isFileSystemAccessSupported, openProjectFolder } from './pbir/fs.ts'
 import { deployTheme } from './theme/deploy.ts'
 import { deployLayout, type LayoutEdit } from './layout/deploy.ts'
 import { alignRects, distributeRects, matchSize, type AlignEdge, type DistAxis, type MatchDim, type Rect } from './layout/geometry.ts'
+import { analyzeReport, type DoctorRule, type Finding } from './doctor/analyze.ts'
+import { applyDoctorEdits, type DoctorEdits } from './doctor/apply.ts'
+import { deployDoctor } from './doctor/deploy.ts'
 import { PageCanvas } from './render/PageCanvas.tsx'
 import { Landing } from './ui/Landing.tsx'
 import { Sidebar } from './ui/Sidebar.tsx'
 import { Inspector } from './ui/Inspector.tsx'
 import { ThemeLab } from './ui/ThemeLab.tsx'
 import { LayoutLab } from './ui/LayoutLab.tsx'
+import { DesignDoctor } from './ui/DesignDoctor.tsx'
 import { Topbar } from './ui/Topbar.tsx'
 
 const CANVAS_MARGIN = 32
 const GRID = 8
-type View = 'mirror' | 'theme' | 'layout'
+type View = 'mirror' | 'theme' | 'layout' | 'doctor'
 type AppTheme = 'light' | 'dark'
 type DraftMap = Record<string, Rect>
 interface Hist { stack: DraftMap[]; at: number }
@@ -59,6 +63,10 @@ export default function App() {
   const [showGrid, setShowGrid] = useState(false)
   const [deployingLayout, setDeployingLayout] = useState(false)
 
+  // Design Doctor
+  const [doctorEdits, setDoctorEdits] = useState<DoctorEdits>({})
+  const [deployingDoctor, setDeployingDoctor] = useState(false)
+
   const layoutDraftRef = useRef<DraftMap>({})
   const selectionRef = useRef<Set<string>>(selection)
   const histRef = useRef<Hist>(hist)
@@ -72,9 +80,21 @@ export default function App() {
     document.documentElement.setAttribute('data-theme', appTheme)
   }, [appTheme])
 
-  const activePage = report?.pages.find((p) => p.id === activePageId) ?? report?.pages[0] ?? null
+  // Doctor fixes are applied to the model so the mirror previews them live, and
+  // they become the baseline that Layout Lab and the analyzer read from.
+  const effectiveReport = useMemo(
+    () => (report ? applyDoctorEdits(report, doctorEdits) : null),
+    [report, doctorEdits],
+  )
+  const activePage = effectiveReport?.pages.find((p) => p.id === activePageId) ?? effectiveReport?.pages[0] ?? null
   const effectiveTheme = themeDraft ?? report?.theme ?? null
   const originalTheme = report?.theme ?? null
+
+  const findings = useMemo<Finding[]>(
+    () => (view === 'doctor' && effectiveReport ? analyzeReport(effectiveReport) : []),
+    [view, effectiveReport],
+  )
+  const doctorEditedCount = Object.keys(doctorEdits).length
 
   useEffect(() => { reportRef.current = report }, [report])
   useEffect(() => { activePageIdRef.current = activePage?.id ?? null }, [activePage])
@@ -87,9 +107,9 @@ export default function App() {
 
   const visualsById = useMemo(() => {
     const m = new Map<string, VisualNode>()
-    report?.pages.forEach((p) => p.visuals.forEach((v) => m.set(v.id, v)))
+    effectiveReport?.pages.forEach((p) => p.visuals.forEach((v) => m.set(v.id, v)))
     return m
-  }, [report])
+  }, [effectiveReport])
 
   const rectOf = useCallback((id: string): Rect | undefined => {
     const v = visualsById.get(id)
@@ -156,6 +176,7 @@ export default function App() {
     setSelection(new Set())
     setHist({ stack: [{}], at: 0 })
     histRef.current = { stack: [{}], at: 0 }
+    setDoctorEdits({})
     setError(null)
     setNotice(null)
   }, [setDraft, setSelection])
@@ -334,6 +355,56 @@ export default function App() {
     }
   }, [handle, changedEdits, setDraft])
 
+  // --- Design Doctor ---
+  const originalById = useMemo(() => {
+    const m = new Map<string, VisualNode>()
+    report?.pages.forEach((p) => p.visuals.forEach((v) => m.set(v.id, v)))
+    return m
+  }, [report])
+
+  const applyFindings = useCallback(
+    (list: Finding[]) => {
+      setDoctorEdits((prev) => {
+        const next = { ...prev }
+        for (const f of list) {
+          for (const { visualId, patch } of f.patches) {
+            const base = next[visualId] ?? originalById.get(visualId)?.raw
+            if (base) next[visualId] = patch(base)
+          }
+        }
+        return next
+      })
+    },
+    [originalById],
+  )
+  const onFix = useCallback((f: Finding) => applyFindings([f]), [applyFindings])
+  const onFixAll = useCallback(
+    (rule?: DoctorRule) => applyFindings(rule ? findings.filter((f) => f.rule === rule) : findings),
+    [applyFindings, findings],
+  )
+  const resetDoctor = useCallback(() => setDoctorEdits({}), [])
+
+  const onDeployDoctor = useCallback(async () => {
+    if (!handle || doctorEditedCount === 0) return
+    setDeployingDoctor(true)
+    setError(null)
+    setNotice(null)
+    try {
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+      const edits = Object.entries(doctorEdits)
+        .map(([id, raw]) => ({ file: originalById.get(id)?.file, raw }))
+        .filter((e): e is { file: string; raw: (typeof doctorEdits)[string] } => !!e.file)
+      const res = await deployDoctor(handle, edits, stamp)
+      setReport((r) => (r ? applyDoctorEdits(r, doctorEdits) : r)) // bake fixes into the baseline
+      setDoctorEdits({})
+      setNotice(`Fixed ${res.count} visual${res.count === 1 ? '' : 's'}. Backup at ${res.backupDir}. Close and reopen the report in Power BI Desktop to see it.`)
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setDeployingDoctor(false)
+    }
+  }, [handle, doctorEdits, doctorEditedCount, originalById])
+
   // Fit-to-viewport scaling.
   useLayoutEffect(() => {
     if (atHome || !activePage || !stageRef.current) return
@@ -418,6 +489,7 @@ export default function App() {
               </label>
             )}
             {view === 'layout' && <span className="stage-hint">Drag to move · Shift-click to multi-select · arrows to nudge</span>}
+            {view === 'doctor' && <span className="stage-hint">Fixes preview here live · deploy writes them back</span>}
           </div>
           <div className="stage" ref={stageRef}>
             {activePage ? (
@@ -492,6 +564,17 @@ export default function App() {
             onRedo={onRedo}
             onReset={resetLayout}
             onDeploy={onDeployLayout}
+          />
+        ) : view === 'doctor' ? (
+          <DesignDoctor
+            findings={findings}
+            editedCount={doctorEditedCount}
+            canDeploy={!!handle}
+            deploying={deployingDoctor}
+            onFix={onFix}
+            onFixAll={onFixAll}
+            onReset={resetDoctor}
+            onDeploy={onDeployDoctor}
           />
         ) : (
           <Inspector report={report} page={activePage} visual={selectedVisual} scale={scale} />

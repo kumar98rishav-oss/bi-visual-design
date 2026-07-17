@@ -30,6 +30,8 @@ interface VisualSpec {
   title?: { text: string; themeBg?: number; radius?: number; color?: number }
   projections?: { role: string; field: JsonObject }[]
   group?: string
+  /** Off-palette border colour — seeds a Design Doctor "off-palette" finding. */
+  borderColor?: string
 }
 
 function visualJson(spec: VisualSpec): JsonObject {
@@ -50,7 +52,10 @@ function visualJson(spec: VisualSpec): JsonObject {
       },
     ]
     if (spec.title.radius != null) {
-      vco.border = [{ properties: { show: makeLiteral(true), radius: makeLiteral(spec.title.radius) } }]
+      const props: JsonObject = { show: makeLiteral(true), radius: makeLiteral(spec.title.radius) }
+      // A deliberately off-palette border colour, for the Design Doctor demo.
+      if (spec.borderColor) props.color = makeLiteralColor(spec.borderColor)
+      vco.border = [{ properties: props }]
     }
   }
 
@@ -86,13 +91,16 @@ function groupJson(id: string, name: string, x: number, y: number, w: number, h:
 }
 
 // --- Page 1: Overview ------------------------------------------------------
+// A few deliberate imperfections are seeded here so the Design Doctor demo has
+// something to catch: a sub-pixel header (x=24.37), one KPI 2px out of the row
+// (y=82) with an odd corner radius (14 vs 12), and an off-palette bar border.
 const page1Visuals: VisualSpec[] = [
-  { id: 'v_hdr', type: 'textbox', x: 24, y: 16, w: 1232, h: 48, title: { text: 'Quarterly Sales Overview', themeBg: 2, radius: 8 } },
+  { id: 'v_hdr', type: 'textbox', x: 24.37, y: 16, w: 1232, h: 48, title: { text: 'Quarterly Sales Overview', themeBg: 2, radius: 8 } },
   { id: 'v_kpi1', type: 'card', x: 24, y: 84, w: 292, h: 120, title: { text: 'Revenue', themeBg: 1, radius: 12 }, projections: [{ role: 'Values', field: measure('_Measures', 'Total Revenue') }] },
   { id: 'v_kpi2', type: 'card', x: 336, y: 84, w: 292, h: 120, title: { text: 'Orders', themeBg: 3, radius: 12 }, projections: [{ role: 'Values', field: measure('_Measures', 'Order Count') }] },
-  { id: 'v_kpi3', type: 'card', x: 648, y: 84, w: 292, h: 120, title: { text: 'Avg Basket', themeBg: 4, radius: 12 }, projections: [{ role: 'Values', field: measure('_Measures', 'Avg Basket') }] },
+  { id: 'v_kpi3', type: 'card', x: 648, y: 82, w: 292, h: 120, title: { text: 'Avg Basket', themeBg: 4, radius: 14 }, projections: [{ role: 'Values', field: measure('_Measures', 'Avg Basket') }] },
   { id: 'v_kpi4', type: 'card', x: 960, y: 84, w: 296, h: 120, title: { text: 'Margin %', themeBg: 5, radius: 12 }, projections: [{ role: 'Values', field: measure('_Measures', 'Margin Pct') }] },
-  { id: 'v_bar', type: 'clusteredBarChart', x: 24, y: 224, w: 616, h: 280, title: { text: 'Revenue by Region', radius: 8 }, projections: [{ role: 'Category', field: column('Region', 'Name') }, { role: 'Y', field: measure('_Measures', 'Total Revenue') }] },
+  { id: 'v_bar', type: 'clusteredBarChart', x: 24, y: 224, w: 616, h: 280, borderColor: '#4C6EF6', title: { text: 'Revenue by Region', radius: 8 }, projections: [{ role: 'Category', field: column('Region', 'Name') }, { role: 'Y', field: measure('_Measures', 'Total Revenue') }] },
   { id: 'v_line', type: 'lineChart', x: 656, y: 224, w: 600, h: 280, title: { text: 'Revenue Trend', radius: 8 }, projections: [{ role: 'Category', field: column('Date', 'Month') }, { role: 'Y', field: measure('_Measures', 'Total Revenue') }] },
   { id: 'v_donut', type: 'donutChart', x: 24, y: 524, w: 400, h: 176, title: { text: 'Sales by Channel', radius: 8 }, projections: [{ role: 'Legend', field: column('Channel', 'Name') }, { role: 'Values', field: measure('_Measures', 'Total Revenue') }] },
   { id: 'v_slicer', type: 'slicer', x: 440, y: 524, w: 240, h: 176, title: { text: 'Region', radius: 8 } },
