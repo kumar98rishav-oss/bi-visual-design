@@ -70,6 +70,19 @@ npm run build          # production build
 `npm run verify:pbir [projectRoot]` defaults to the Medical_Legal test project;
 pass a path to point it at any PBIP folder.
 
+## Hosting (Render)
+
+The app is a static Vite build — any static host works. A [`render.yaml`](render.yaml)
+blueprint is included:
+
+- **Build command:** `npm ci && npm run build`
+- **Publish directory:** `dist`
+- **SPA fallback:** `/*` → `/index.html`
+
+On [Render](https://render.com): **New + → Blueprint**, connect this repo, and it
+reads `render.yaml`. (Or create a **Static Site** manually with the settings
+above.) It deploys on every push to `main`.
+
 ## How deploy stays safe
 
 Corrupting someone's report is the one unforgivable failure, so every write:
