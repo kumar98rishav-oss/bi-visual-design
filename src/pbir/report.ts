@@ -125,7 +125,8 @@ async function loadVisual(
   visualId: string,
   pageId: string,
 ): Promise<VisualNode | null> {
-  const raw = parseJson(await fp.readText(`${visualsDir}/${visualId}/visual.json`))
+  const file = `${visualsDir}/${visualId}/visual.json`
+  const raw = parseJson(await fp.readText(file))
   if (!raw) return null
 
   // A container node groups other visuals; it has `visualGroup` in place of
@@ -136,6 +137,7 @@ async function loadVisual(
     return {
       id: visualId,
       pageId,
+      file,
       name: typeof group.displayName === 'string' ? group.displayName : (typeof raw.name === 'string' ? raw.name : visualId),
       position: readPosition(raw.position),
       visualType: 'visualGroup',
@@ -149,6 +151,7 @@ async function loadVisual(
   return {
     id: visualId,
     pageId,
+    file,
     name: typeof raw.name === 'string' ? raw.name : visualId,
     position: readPosition(raw.position),
     visualType: typeof visual.visualType === 'string' ? visual.visualType : 'unknown',

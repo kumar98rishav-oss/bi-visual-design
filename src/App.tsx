@@ -1,20 +1,29 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { ReportModel, Theme } from './pbir/types.ts'
+import type { PageNode, ReportModel, Theme, VisualNode } from './pbir/types.ts'
 import { loadReport } from './pbir/report.ts'
 import { createMemoryProvider } from './pbir/memoryProvider.ts'
 import { buildSampleFiles, SAMPLE_REPORT_NAME } from './sample/sampleReport.ts'
 import { isFileSystemAccessSupported, openProjectFolder } from './pbir/fs.ts'
 import { deployTheme } from './theme/deploy.ts'
+import { deployLayout, type LayoutEdit } from './layout/deploy.ts'
+import { alignRects, distributeRects, matchSize, type AlignEdge, type DistAxis, type MatchDim, type Rect } from './layout/geometry.ts'
 import { PageCanvas } from './render/PageCanvas.tsx'
 import { Landing } from './ui/Landing.tsx'
 import { Sidebar } from './ui/Sidebar.tsx'
 import { Inspector } from './ui/Inspector.tsx'
 import { ThemeLab } from './ui/ThemeLab.tsx'
+import { LayoutLab } from './ui/LayoutLab.tsx'
 import { Topbar } from './ui/Topbar.tsx'
 
 const CANVAS_MARGIN = 32
-type View = 'mirror' | 'theme'
+const GRID = 8
+type View = 'mirror' | 'theme' | 'layout'
 type AppTheme = 'light' | 'dark'
+type DraftMap = Record<string, Rect>
+interface Hist { stack: DraftMap[]; at: number }
+
+const toRect = (v: VisualNode): Rect => ({ x: v.position.x, y: v.position.y, w: v.position.width, h: v.position.height })
+const rectEq = (a: Rect, b: Rect) => a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h
 
 function cloneTheme(t: Theme): Theme {
   return { ...t, dataColors: [...t.dataColors] }
@@ -36,14 +45,29 @@ export default function App() {
 
   const [appTheme, setAppTheme] = useState<AppTheme>('dark')
   const [view, setView] = useState<View>('mirror')
+
+  // Theme Lab
   const [themeDraft, setThemeDraft] = useState<Theme | null>(null)
   const [compare, setCompare] = useState(false)
   const [deploying, setDeploying] = useState(false)
 
+  // Layout Lab
+  const [layoutDraft, setLayoutDraft] = useState<DraftMap>({})
+  const [selection, setSelectionState] = useState<Set<string>>(new Set())
+  const [hist, setHist] = useState<Hist>({ stack: [{}], at: 0 })
+  const [gridSnap, setGridSnap] = useState(true)
+  const [showGrid, setShowGrid] = useState(false)
+  const [deployingLayout, setDeployingLayout] = useState(false)
+
+  const layoutDraftRef = useRef<DraftMap>({})
+  const selectionRef = useRef<Set<string>>(selection)
+  const histRef = useRef<Hist>(hist)
+  const reportRef = useRef<ReportModel | null>(null)
+  const activePageIdRef = useRef<string | null>(null)
+
   const stageRef = useRef<HTMLDivElement>(null)
   const [scale, setScale] = useState(1)
 
-  // Apply the app theme to the document root so tokens switch.
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', appTheme)
   }, [appTheme])
@@ -52,10 +76,72 @@ export default function App() {
   const effectiveTheme = themeDraft ?? report?.theme ?? null
   const originalTheme = report?.theme ?? null
 
-  const dirty = useMemo(
+  useEffect(() => { reportRef.current = report }, [report])
+  useEffect(() => { activePageIdRef.current = activePage?.id ?? null }, [activePage])
+  useEffect(() => { histRef.current = hist }, [hist])
+
+  const themeDirty = useMemo(
     () => !!themeDraft && themeFingerprint(themeDraft) !== themeFingerprint(originalTheme),
     [themeDraft, originalTheme],
   )
+
+  const visualsById = useMemo(() => {
+    const m = new Map<string, VisualNode>()
+    report?.pages.forEach((p) => p.visuals.forEach((v) => m.set(v.id, v)))
+    return m
+  }, [report])
+
+  const rectOf = useCallback((id: string): Rect | undefined => {
+    const v = visualsById.get(id)
+    return v ? layoutDraft[id] ?? toRect(v) : undefined
+  }, [visualsById, layoutDraft])
+
+  // Which visuals actually moved (draft differs from original).
+  const changedEdits = useMemo<LayoutEdit[]>(() => {
+    const out: LayoutEdit[] = []
+    for (const [id, rect] of Object.entries(layoutDraft)) {
+      const v = visualsById.get(id)
+      if (v && !rectEq(rect, toRect(v))) out.push({ visual: v, rect })
+    }
+    return out
+  }, [layoutDraft, visualsById])
+  const layoutDirty = changedEdits.length > 0
+
+  // --- Selection & draft helpers (keep refs in sync for keyboard handlers) ---
+  const setSelection = useCallback((next: Set<string>) => {
+    selectionRef.current = next
+    setSelectionState(next)
+  }, [])
+
+  const setDraft = useCallback((next: DraftMap) => {
+    layoutDraftRef.current = next
+    setLayoutDraft(next)
+  }, [])
+
+  const pushHistory = useCallback((draft: DraftMap) => {
+    setHist((h) => {
+      const stack = h.stack.slice(0, h.at + 1)
+      stack.push(draft)
+      const next = { stack, at: stack.length - 1 }
+      histRef.current = next
+      return next
+    })
+  }, [])
+
+  const commitDraft = useCallback((next: DraftMap) => {
+    setDraft(next)
+    pushHistory(next)
+  }, [setDraft, pushHistory])
+
+  // Live drag updates (no history entry until commit).
+  const onDraftChange = useCallback((patch: DraftMap) => {
+    setLayoutDraft((prev) => {
+      const n = { ...prev, ...patch }
+      layoutDraftRef.current = n
+      return n
+    })
+  }, [])
+  const onLayoutCommit = useCallback(() => pushHistory(layoutDraftRef.current), [pushHistory])
 
   const adoptReport = useCallback((model: ReportModel, dirHandle: FileSystemDirectoryHandle | null) => {
     setReport(model)
@@ -66,9 +152,13 @@ export default function App() {
     setSelectedVisualId(null)
     setThemeDraft(model.theme ? cloneTheme(model.theme) : null)
     setCompare(false)
+    setDraft({})
+    setSelection(new Set())
+    setHist({ stack: [{}], at: 0 })
+    histRef.current = { stack: [{}], at: 0 }
     setError(null)
     setNotice(null)
-  }, [])
+  }, [setDraft, setSelection])
 
   const loadSample = useCallback(async () => {
     setBusy(true)
@@ -95,7 +185,8 @@ export default function App() {
     }
   }, [adoptReport])
 
-  const onDeploy = useCallback(async () => {
+  // --- Theme deploy ---
+  const onDeployTheme = useCallback(async () => {
     if (!handle || !themeDraft) return
     setDeploying(true)
     setError(null)
@@ -116,6 +207,134 @@ export default function App() {
     if (originalTheme) setThemeDraft(cloneTheme(originalTheme))
   }, [originalTheme])
 
+  // --- Layout operations ---
+  const applyToSelection = useCallback(
+    (fn: (rects: Rect[], ids: string[]) => Rect[]) => {
+      const ids = [...selectionRef.current]
+      const rects = ids.map((id) => rectOf(id)).filter((r): r is Rect => !!r)
+      if (rects.length !== ids.length) return
+      const result = fn(rects, ids)
+      const next = { ...layoutDraftRef.current }
+      ids.forEach((id, i) => (next[id] = result[i]))
+      commitDraft(next)
+    },
+    [rectOf, commitDraft],
+  )
+
+  const onAlign = useCallback((edge: AlignEdge) => applyToSelection((r) => alignRects(r, edge)), [applyToSelection])
+  const onDistribute = useCallback((axis: DistAxis) => applyToSelection((r) => distributeRects(r, axis)), [applyToSelection])
+  const onMatch = useCallback((dim: MatchDim) => applyToSelection((r) => matchSize(r, r.length - 1, dim)), [applyToSelection])
+
+  const onSetRect = useCallback((id: string, patch: Partial<Rect>) => {
+    const cur = rectOf(id)
+    if (!cur) return
+    commitDraft({ ...layoutDraftRef.current, [id]: { ...cur, ...patch } })
+  }, [rectOf, commitDraft])
+
+  const onUndo = useCallback(() => {
+    const h = histRef.current
+    if (h.at <= 0) return
+    const at = h.at - 1
+    setDraft(h.stack[at])
+    const next = { ...h, at }
+    histRef.current = next
+    setHist(next)
+  }, [setDraft])
+  const onRedo = useCallback(() => {
+    const h = histRef.current
+    if (h.at >= h.stack.length - 1) return
+    const at = h.at + 1
+    setDraft(h.stack[at])
+    const next = { ...h, at }
+    histRef.current = next
+    setHist(next)
+  }, [setDraft])
+
+  const resetLayout = useCallback(() => {
+    setDraft({})
+    const h = { stack: [{}], at: 0 }
+    histRef.current = h
+    setHist(h)
+  }, [setDraft])
+
+  // Keyboard: nudge, undo/redo, deselect — active only in Layout view.
+  useEffect(() => {
+    if (view !== 'layout') return
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return
+      const meta = e.ctrlKey || e.metaKey
+      if (meta && e.key.toLowerCase() === 'z') {
+        e.preventDefault()
+        e.shiftKey ? onRedo() : onUndo()
+        return
+      }
+      if (meta && e.key.toLowerCase() === 'y') {
+        e.preventDefault()
+        onRedo()
+        return
+      }
+      if (e.key === 'Escape') {
+        setSelection(new Set())
+        return
+      }
+      const nudges: Record<string, [number, number]> = {
+        ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1],
+      }
+      const d = nudges[e.key]
+      const ids = [...selectionRef.current]
+      if (d && ids.length) {
+        e.preventDefault()
+        const step = e.shiftKey ? 10 : 1
+        const next = { ...layoutDraftRef.current }
+        for (const id of ids) {
+          const cur = rectOf(id)
+          if (cur) next[id] = { ...cur, x: cur.x + d[0] * step, y: cur.y + d[1] * step }
+        }
+        commitDraft(next)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [view, rectOf, commitDraft, onUndo, onRedo, setSelection])
+
+  // --- Layout deploy ---
+  const onDeployLayout = useCallback(async () => {
+    if (!handle || !changedEdits.length) return
+    setDeployingLayout(true)
+    setError(null)
+    setNotice(null)
+    try {
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+      const res = await deployLayout(handle, changedEdits, stamp)
+      // Fold the deployed positions into the model as the new baseline.
+      const editedById = new Map(changedEdits.map((e) => [e.visual.id, e.rect]))
+      setReport((r) => {
+        if (!r) return r
+        const pages: PageNode[] = r.pages.map((p) => ({
+          ...p,
+          visuals: p.visuals.map((v) => {
+            const rc = editedById.get(v.id)
+            if (!rc) return v
+            const position = { ...v.position, x: rc.x, y: rc.y, width: rc.w, height: rc.h }
+            return { ...v, position, raw: { ...v.raw, position } }
+          }),
+        }))
+        return { ...r, pages }
+      })
+      setDraft({})
+      const h = { stack: [{}], at: 0 }
+      histRef.current = h
+      setHist(h)
+      setNotice(`Deployed ${res.count} visual position${res.count === 1 ? '' : 's'}. Backup at ${res.backupDir}. Close and reopen the report in Power BI Desktop to see it.`)
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setDeployingLayout(false)
+    }
+  }, [handle, changedEdits, setDraft])
+
+  // Fit-to-viewport scaling.
   useLayoutEffect(() => {
     if (atHome || !activePage || !stageRef.current) return
     const measure = () => {
@@ -133,7 +352,6 @@ export default function App() {
     return () => ro.disconnect()
   }, [activePage, compare, view, atHome])
 
-  // Landing until a report is opened (or the user returns Home).
   if (atHome || !report) {
     return (
       <Landing
@@ -147,6 +365,7 @@ export default function App() {
 
   const selectedVisual = activePage?.visuals.find((v) => v.id === selectedVisualId) ?? null
   const showCompare = compare && view === 'theme' && activePage
+  const singleSel = selection.size === 1 ? (() => { const id = [...selection][0]; const rect = rectOf(id); return rect ? { id, rect } : null })() : null
 
   return (
     <div className="app">
@@ -183,15 +402,14 @@ export default function App() {
           onSelectPage={(id) => {
             setActivePageId(id)
             setSelectedVisualId(null)
+            setSelection(new Set())
           }}
         />
 
         <main className="stage-wrap">
           <div className="stage-toolbar">
             <span className="stage-page">{activePage ? activePage.displayName : '—'}</span>
-            <span className="stage-dim">
-              {activePage ? `${activePage.width}×${activePage.height}` : ''}
-            </span>
+            <span className="stage-dim">{activePage ? `${activePage.width}×${activePage.height}` : ''}</span>
             <span className="stage-zoom">{Math.round(scale * 100)}%</span>
             {view === 'theme' && (
               <label className="stage-compare">
@@ -199,6 +417,7 @@ export default function App() {
                 A/B compare
               </label>
             )}
+            {view === 'layout' && <span className="stage-hint">Drag to move · Shift-click to multi-select · arrows to nudge</span>}
           </div>
           <div className="stage" ref={stageRef}>
             {activePage ? (
@@ -220,12 +439,23 @@ export default function App() {
                   scale={scale}
                   selectedVisualId={selectedVisualId}
                   onSelectVisual={setSelectedVisualId}
+                  layout={
+                    view === 'layout'
+                      ? {
+                          draftRects: layoutDraft,
+                          selection,
+                          grid: gridSnap ? GRID : null,
+                          showGrid,
+                          onSelect: setSelection,
+                          onDraftChange,
+                          onCommit: onLayoutCommit,
+                        }
+                      : undefined
+                  }
                 />
               )
             ) : (
-              <div className="empty-state">
-                <p>This report has no pages.</p>
-              </div>
+              <div className="empty-state"><p>This report has no pages.</p></div>
             )}
           </div>
         </main>
@@ -233,12 +463,35 @@ export default function App() {
         {view === 'theme' && effectiveTheme ? (
           <ThemeLab
             theme={effectiveTheme}
-            dirty={dirty}
+            dirty={themeDirty}
             canDeploy={!!handle}
             deploying={deploying}
             onChange={setThemeDraft}
             onReset={resetTheme}
-            onDeploy={onDeploy}
+            onDeploy={onDeployTheme}
+          />
+        ) : view === 'layout' ? (
+          <LayoutLab
+            selectionCount={selection.size}
+            single={singleSel}
+            grid={gridSnap}
+            showGrid={showGrid}
+            dirty={layoutDirty}
+            changedCount={changedEdits.length}
+            canDeploy={!!handle}
+            deploying={deployingLayout}
+            canUndo={hist.at > 0}
+            canRedo={hist.at < hist.stack.length - 1}
+            onSetRect={onSetRect}
+            onAlign={onAlign}
+            onDistribute={onDistribute}
+            onMatch={onMatch}
+            onToggleGrid={() => setGridSnap((g) => !g)}
+            onToggleShowGrid={() => setShowGrid((g) => !g)}
+            onUndo={onUndo}
+            onRedo={onRedo}
+            onReset={resetLayout}
+            onDeploy={onDeployLayout}
           />
         ) : (
           <Inspector report={report} page={activePage} visual={selectedVisual} scale={scale} />

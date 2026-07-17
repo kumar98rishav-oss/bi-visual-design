@@ -1,13 +1,15 @@
-import { Palette, ChevronRight, Home, Sun, Moon, FolderOpen, Eye, SlidersHorizontal } from 'lucide-react'
+import { Palette, ChevronRight, Home, Sun, Moon, FolderOpen, Eye, SlidersHorizontal, Move } from 'lucide-react'
 import type { ReportModel } from '../pbir/types.ts'
+
+type View = 'mirror' | 'theme' | 'layout'
 
 interface Props {
   report: ReportModel | null
-  view: 'mirror' | 'theme'
+  view: View
   theme: 'light' | 'dark'
   busy: boolean
   canOpen: boolean
-  onViewChange: (v: 'mirror' | 'theme') => void
+  onViewChange: (v: View) => void
   onToggleTheme: () => void
   onHome: () => void
   onOpenFolder: () => void
@@ -61,6 +63,14 @@ export function Topbar({ report, view, theme, busy, canOpen, onViewChange, onTog
           aria-selected={view === 'theme'}
         >
           <SlidersHorizontal size={14} /> Theme Lab
+        </button>
+        <button
+          className={`segmented__btn${view === 'layout' ? ' active' : ''}`}
+          onClick={() => onViewChange('layout')}
+          role="tab"
+          aria-selected={view === 'layout'}
+        >
+          <Move size={14} /> Layout Lab
         </button>
       </div>
 

@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "typecheck:scripts": "tsc -p tsconfig.scripts.json",
-    "verify:pbir": "node --experimental-strip-types scripts/verify-pbir.ts"
+    "verify:pbir": "node --experimental-strip-types scripts/verify-pbir.ts",
+    "verify:layout": "node --experimental-strip-types scripts/verify-layout.ts"
   },
   "dependencies": {
     "lucide-react": "^0.454.0",

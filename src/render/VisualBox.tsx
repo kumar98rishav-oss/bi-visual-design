@@ -3,6 +3,7 @@
 
 import { useMemo } from 'react'
 import type { Theme, VisualNode } from '../pbir/types.ts'
+import type { Rect } from '../layout/geometry.ts'
 import { readVisualChrome } from './formatting.ts'
 import { PlaceholderVisual } from './PlaceholderVisual.tsx'
 
@@ -11,13 +12,20 @@ interface Props {
   theme: Theme | null
   selected: boolean
   onSelect: (id: string) => void
+  /** When set (Layout mode), render at this rect instead of the stored one. */
+  rect?: Rect
+  /** In Layout mode the overlay handles pointer events, not the box. */
+  inert?: boolean
 }
 
 const TITLE_H = 24
 
-export function VisualBox({ visual, theme, selected, onSelect }: Props) {
+export function VisualBox({ visual, theme, selected, onSelect, rect, inert }: Props) {
   const chrome = useMemo(() => readVisualChrome(visual, theme), [visual, theme])
-  const { position } = visual
+  const pos = rect
+    ? { x: rect.x, y: rect.y, width: rect.w, height: rect.h, z: visual.position.z }
+    : visual.position
+  const position = pos
 
   const isGroup = visual.visualType === 'visualGroup'
   const showTitle = !!chrome.title && chrome.title.show && chrome.title.text !== ''
@@ -29,6 +37,7 @@ export function VisualBox({ visual, theme, selected, onSelect }: Props) {
     width: position.width,
     height: position.height,
     zIndex: position.z,
+    pointerEvents: inert ? 'none' : undefined,
     borderRadius: chrome.border.radius || (isGroup ? 0 : 4),
     background: isGroup ? 'transparent' : chrome.background ?? 'var(--art-surface)',
     border: isGroup

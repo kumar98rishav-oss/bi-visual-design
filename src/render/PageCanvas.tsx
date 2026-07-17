@@ -1,10 +1,24 @@
 // Renders one page at its native PBIR size, scaled to fit the viewport, with
-// the page background applied and every visual positioned exactly.
+// the page background applied and every visual positioned exactly. In Layout
+// mode it renders visuals at their draft positions and mounts the interactive
+// LayoutOverlay on top.
 
 import { useMemo } from 'react'
-import type { PageNode, Theme } from '../pbir/types.ts'
+import type { PageNode, Theme, VisualNode } from '../pbir/types.ts'
+import type { Rect } from '../layout/geometry.ts'
 import { readPageChrome } from './formatting.ts'
 import { VisualBox } from './VisualBox.tsx'
+import { LayoutOverlay, type LayoutItem } from './LayoutOverlay.tsx'
+
+interface LayoutProps {
+  draftRects: Record<string, Rect>
+  selection: Set<string>
+  grid: number | null
+  showGrid: boolean
+  onSelect: (next: Set<string>) => void
+  onDraftChange: (patch: Record<string, Rect>) => void
+  onCommit: () => void
+}
 
 interface Props {
   page: PageNode
@@ -12,19 +26,25 @@ interface Props {
   scale: number
   selectedVisualId: string | null
   onSelectVisual: (id: string | null) => void
+  /** Present only in Layout mode. */
+  layout?: LayoutProps
 }
 
-export function PageCanvas({ page, theme, scale, selectedVisualId, onSelectVisual }: Props) {
+const toRect = (v: VisualNode): Rect => ({ x: v.position.x, y: v.position.y, w: v.position.width, h: v.position.height })
+
+export function PageCanvas({ page, theme, scale, selectedVisualId, onSelectVisual, layout }: Props) {
   const chrome = useMemo(() => readPageChrome(page, theme), [page, theme])
+  const layoutMode = !!layout
+  const rectOf = (v: VisualNode): Rect => layout?.draftRects[v.id] ?? toRect(v)
 
   return (
     <div
       className="page-canvas-scaler"
       style={{ width: page.width * scale, height: page.height * scale }}
-      onClick={() => onSelectVisual(null)}
+      onClick={() => !layoutMode && onSelectVisual(null)}
     >
       <div
-        className="page-canvas"
+        className={`page-canvas${layoutMode ? ' layout-mode' : ''}`}
         style={{
           width: page.width,
           height: page.height,
@@ -37,11 +57,30 @@ export function PageCanvas({ page, theme, scale, selectedVisualId, onSelectVisua
             key={v.id}
             visual={v}
             theme={theme}
-            selected={v.id === selectedVisualId}
+            selected={!layoutMode && v.id === selectedVisualId}
             onSelect={onSelectVisual}
+            rect={layoutMode ? rectOf(v) : undefined}
+            inert={layoutMode}
           />
         ))}
       </div>
+
+      {layout && (
+        <LayoutOverlay
+          width={page.width}
+          height={page.height}
+          scale={scale}
+          items={page.visuals
+            .filter((v) => v.visualType !== 'visualGroup')
+            .map<LayoutItem>((v) => ({ id: v.id, rect: rectOf(v), isGroup: false }))}
+          selection={layout.selection}
+          grid={layout.grid}
+          showGrid={layout.showGrid}
+          onSelect={layout.onSelect}
+          onDraftChange={layout.onDraftChange}
+          onCommit={layout.onCommit}
+        />
+      )}
     </div>
   )
 }

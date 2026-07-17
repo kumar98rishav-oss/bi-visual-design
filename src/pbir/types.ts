@@ -85,6 +85,8 @@ export interface VisualNode {
   id: string
   /** Owning page id. */
   pageId: string
+  /** Project-relative path to this visual.json, for deploy. */
+  file: string
   name: string
   position: VisualPosition
   /** "card", "clusteredBarChart", "slicer", "textbox", ... */
