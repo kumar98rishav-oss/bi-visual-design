@@ -80,10 +80,10 @@ export default function App() {
   const [zOverrides, setZOverrides] = useState<Record<string, number>>({})
   const designerDirty = pendingPanels.length > 0 || Object.keys(zOverrides).length > 0
 
-  // True View (M6.0): captured Desktop pixels per page
+  // True View (M6.0/M6.1): captured Desktop pixels per page
   const [capture, setCapture] = useState<DesktopCapture | null>(null)
   const [snapshots, setSnapshots] = useState<Record<string, PageSnapshot>>({})
-  const [truthMode, setTruthMode] = useState<'off' | 'truth' | 'ghost'>('off')
+  const [truthMode, setTruthMode] = useState<'off' | 'truth' | 'ghost' | 'sprites'>('off')
   const [captureDialogOpen, setCaptureDialogOpen] = useState(false)
   const lastCropRef = useRef<CropRect | null>(null)
 
@@ -498,11 +498,17 @@ export default function App() {
     (dataUrl: string, crop: CropRect) => {
       if (!activePage) return
       lastCropRef.current = crop
-      setSnapshots((prev) => ({ ...prev, [activePage.id]: { dataUrl, at: Date.now(), crop } }))
+      // Record where every visual IS right now (draft included): sprites slice
+      // by these rects, so they stay correct after later drags and deploys.
+      const rects: Record<string, Rect> = {}
+      for (const v of activePage.visuals) {
+        rects[v.id] = rectOf(v.id) ?? { x: v.position.x, y: v.position.y, w: v.position.width, h: v.position.height }
+      }
+      setSnapshots((prev) => ({ ...prev, [activePage.id]: { dataUrl, at: Date.now(), crop, rects } }))
       setCaptureDialogOpen(false)
       setTruthMode((m) => (m === 'off' ? 'truth' : m))
     },
-    [activePage],
+    [activePage, rectOf],
   )
 
   const onDisconnectCapture = useCallback(() => {
@@ -513,8 +519,14 @@ export default function App() {
   const activeSnapshot = activePage ? snapshots[activePage.id] : undefined
   // Layout mode keeps the overlay interactive, so truth downgrades to ghost there.
   const truthForStage =
-    activeSnapshot && truthMode !== 'off'
+    activeSnapshot && (truthMode === 'truth' || truthMode === 'ghost')
       ? { dataUrl: activeSnapshot.dataUrl, mode: (view === 'layout' && truthMode === 'truth' ? 'ghost' : truthMode) as 'truth' | 'ghost' }
+      : undefined
+  // Live visuals: every box renders its own slice of the capture — draggable
+  // real pixels in Layout Lab.
+  const spritesForStage =
+    activeSnapshot && truthMode === 'sprites'
+      ? { dataUrl: activeSnapshot.dataUrl, rects: activeSnapshot.rects }
       : undefined
 
   // --- Designer: layers, restacking, panel minting (M5.1) ---
@@ -659,6 +671,7 @@ export default function App() {
                   <option value="off">Mirror</option>
                   <option value="truth">Desktop pixels</option>
                   <option value="ghost">Ghost overlay</option>
+                  <option value="sprites">Live visuals</option>
                 </select>
               )}
               {capture ? (
@@ -703,6 +716,7 @@ export default function App() {
                   selectedVisualId={selectedVisualId}
                   onSelectVisual={setSelectedVisualId}
                   truth={truthForStage}
+                  sprites={spritesForStage}
                   layout={
                     view === 'layout'
                       ? {

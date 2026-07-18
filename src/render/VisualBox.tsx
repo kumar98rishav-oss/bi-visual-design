@@ -4,6 +4,7 @@
 import { useMemo } from 'react'
 import type { Theme, VisualNode } from '../pbir/types.ts'
 import type { Rect } from '../layout/geometry.ts'
+import { spriteStyle } from '../truth/sprites.ts'
 import { readShapeStyle, readVisualChrome } from './formatting.ts'
 import { PlaceholderVisual } from './PlaceholderVisual.tsx'
 
@@ -16,11 +17,13 @@ interface Props {
   rect?: Rect
   /** In Layout mode the overlay handles pointer events, not the box. */
   inert?: boolean
+  /** Live visuals: render this visual's slice of the captured page. */
+  sprite?: { dataUrl: string; orig: Rect; pageW: number; pageH: number }
 }
 
 const TITLE_H = 24
 
-export function VisualBox({ visual, theme, selected, onSelect, rect, inert }: Props) {
+export function VisualBox({ visual, theme, selected, onSelect, rect, inert, sprite }: Props) {
   const chrome = useMemo(() => readVisualChrome(visual, theme), [visual, theme])
   const shape = useMemo(() => readShapeStyle(visual, theme), [visual, theme])
   const pos = rect
@@ -29,11 +32,24 @@ export function VisualBox({ visual, theme, selected, onSelect, rect, inert }: Pr
   const position = pos
 
   const isGroup = visual.visualType === 'visualGroup'
-  // A shape carries no title bar and no placeholder content — it is pure fill.
-  const showTitle = !shape && !!chrome.title && chrome.title.show && chrome.title.text !== ''
+  // Sprites carry the real rendered pixels — title bar and placeholder both
+  // live inside the capture, so the box shows nothing but the slice.
+  const showTitle = !shape && !sprite && !!chrome.title && chrome.title.show && chrome.title.text !== ''
   const contentH = position.height - (showTitle ? TITLE_H : 0)
 
-  const style: React.CSSProperties = shape
+  const style: React.CSSProperties = sprite
+    ? {
+        // The slice carries its own background, border and shadow pixels.
+        left: position.x,
+        top: position.y,
+        width: position.width,
+        height: position.height,
+        zIndex: position.z,
+        pointerEvents: inert ? 'none' : undefined,
+        background: 'transparent',
+        border: 'none',
+      }
+    : shape
     ? {
         // A shape is a pure panel: its own fill, its own radius, no chrome.
         left: position.x,
@@ -74,6 +90,20 @@ export function VisualBox({ visual, theme, selected, onSelect, rect, inert }: Pr
       title={`${visual.visualType} — ${Math.round(position.width)}×${Math.round(position.height)} @ (${Math.round(position.x)}, ${Math.round(position.y)})`}
     >
       {isGroup && <span className="group-label">{visual.name}</span>}
+      {sprite && (() => {
+        const cur: Rect = { x: position.x, y: position.y, w: position.width, h: position.height }
+        const s = spriteStyle(sprite.orig, cur, sprite.pageW, sprite.pageH)
+        return (
+          <div
+            className="sprite-fill"
+            style={{
+              backgroundImage: `url(${sprite.dataUrl})`,
+              backgroundSize: `${s.width}px ${s.height}px`,
+              backgroundPosition: `${s.x}px ${s.y}px`,
+            }}
+          />
+        )
+      })()}
       {showTitle && chrome.title && (
         <div
           className="visual-title"
@@ -90,7 +120,7 @@ export function VisualBox({ visual, theme, selected, onSelect, rect, inert }: Pr
           </span>
         </div>
       )}
-      {!isGroup && !shape && (
+      {!isGroup && !shape && !sprite && (
         <div className="visual-content" style={{ height: contentH }}>
           <PlaceholderVisual visual={visual} theme={theme} width={position.width} height={contentH} />
         </div>

@@ -96,4 +96,10 @@ export interface PageSnapshot {
   at: number
   /** The calibration used, so re-captures start from the same crop. */
   crop: CropRect
+  /**
+   * Where every visual was (page-logical coords) at capture time. Sprites
+   * slice the snapshot by THESE rects, so they survive later drags/deploys —
+   * the pixels always come from where the visual actually was in the frame.
+   */
+  rects: Record<string, { x: number; y: number; w: number; h: number }>
 }

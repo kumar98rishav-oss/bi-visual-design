@@ -2,6 +2,7 @@
 //   node --experimental-strip-types scripts/verify-truth.ts
 
 import { detectCanvasRect, type FrameData } from '../src/truth/detect.ts'
+import { spriteStyle } from '../src/truth/sprites.ts'
 
 let failures = 0
 const check = (label: string, cond: boolean, detail = '') => {
@@ -86,6 +87,23 @@ console.log('\nNo canvas present (all workspace) → null')
 {
   const f = synthFrame({ W: 640, H: 360, ws: [230, 230, 230], page: [230, 230, 230], canvas: { x: 0, y: 0, w: 1, h: 1 } })
   check('returns null', detectCanvasRect(f, 16 / 9) === null)
+}
+
+console.log('\nSprite background math')
+{
+  const orig = { x: 100, y: 50, w: 200, h: 100 }
+  // Unmoved: the slice sits exactly where it was captured.
+  const same = spriteStyle(orig, orig, 1280, 720)
+  check('unmoved → full-page size, negative offset', same.width === 1280 && same.height === 720 && same.x === -100 && same.y === -50)
+  // Dragged elsewhere, same size: identical slice (position handled by the box).
+  const moved = spriteStyle(orig, { x: 700, y: 300, w: 200, h: 100 }, 1280, 720)
+  check('moved → same slice as unmoved', JSON.stringify(moved) === JSON.stringify(same))
+  // Doubled width: the backdrop scales ×2 horizontally so the slice stretches.
+  const wider = spriteStyle(orig, { x: 100, y: 50, w: 400, h: 100 }, 1280, 720)
+  check('resized → backdrop scales with the box', wider.width === 2560 && wider.x === -200 && wider.height === 720 && wider.y === -50)
+  // Degenerate original never divides by zero.
+  const degen = spriteStyle({ x: 0, y: 0, w: 0, h: 0 }, { x: 0, y: 0, w: 10, h: 10 }, 1280, 720)
+  check('zero-size original is safe', Number.isFinite(degen.width) && Number.isFinite(degen.height))
 }
 
 console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`}`)

@@ -92,21 +92,30 @@ export function CaptureDialog({ capture, aspect, pageName, initialCrop, onCaptur
     [frameSize, aspect],
   )
 
-  // Arrow keys nudge the crop by 1 frame-pixel (Shift = 10) for fine alignment.
+  // Arrows nudge the crop by 1 frame-pixel; +/- grow/shrink it (aspect-locked,
+  // top-left anchored). Shift = ×10. Fine-tuning matters: a few pixels of crop
+  // error becomes a visible drift at the far edge of the page.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      const step = e.shiftKey ? 10 : 1
       const nudges: Record<string, [number, number]> = {
         ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1],
       }
       const d = nudges[e.key]
-      if (!d) return
-      e.preventDefault()
-      const step = e.shiftKey ? 10 : 1
-      setCrop((c) => (c ? clamp({ ...c, x: c.x + d[0] * step, y: c.y + d[1] * step }) : c))
+      if (d) {
+        e.preventDefault()
+        setCrop((c) => (c ? clamp({ ...c, x: c.x + d[0] * step, y: c.y + d[1] * step }) : c))
+        return
+      }
+      if (e.key === '+' || e.key === '=' || e.key === '-') {
+        e.preventDefault()
+        const grow = e.key === '-' ? -step : step
+        setCrop((c) => (c ? clamp({ ...c, w: c.w + grow, h: (c.w + grow) / aspect }) : c))
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [clamp])
+  }, [clamp, aspect])
 
   const onMove = useCallback(
     (e: PointerEvent) => {
@@ -168,10 +177,10 @@ export function CaptureDialog({ capture, aspect, pageName, initialCrop, onCaptur
             <div className="tl-title">Capture “{pageName}”</div>
             <div className="tl-sub">
               {autoFound === true
-                ? 'Report canvas auto-detected — fine-tune with the arrow keys if needed (Shift = ×10), then capture.'
+                ? 'Report canvas auto-detected — arrows nudge, +/− resize (Shift = ×10), then capture.'
                 : autoFound === false
                   ? 'Could not auto-detect the canvas — drag the box over the report page area (not the ribbon or panes).'
-                  : 'Drag the box so it covers only the report canvas — not the ribbon or panes. Arrow keys fine-tune.'}
+                  : 'Drag the box so it covers only the report canvas — arrows nudge, +/− resize (Shift = ×10).'}
             </div>
           </div>
           <button className="iconbtn" onClick={onCancel} aria-label="Close">

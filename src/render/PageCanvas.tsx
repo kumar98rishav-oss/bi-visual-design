@@ -34,11 +34,16 @@ interface Props {
    * so edits can be lined up against reality.
    */
   truth?: { dataUrl: string; mode: 'truth' | 'ghost' }
+  /**
+   * Live visuals: each box renders its own slice of the capture (by its
+   * capture-time rect), so dragging a box drags the real rendered visual.
+   */
+  sprites?: { dataUrl: string; rects: Record<string, Rect> }
 }
 
 const toRect = (v: VisualNode): Rect => ({ x: v.position.x, y: v.position.y, w: v.position.width, h: v.position.height })
 
-export function PageCanvas({ page, theme, scale, selectedVisualId, onSelectVisual, layout, truth }: Props) {
+export function PageCanvas({ page, theme, scale, selectedVisualId, onSelectVisual, layout, truth, sprites }: Props) {
   const chrome = useMemo(() => readPageChrome(page, theme), [page, theme])
   const layoutMode = !!layout
   const rectOf = (v: VisualNode): Rect => layout?.draftRects[v.id] ?? toRect(v)
@@ -60,17 +65,23 @@ export function PageCanvas({ page, theme, scale, selectedVisualId, onSelectVisua
       >
         {/* Rendered FIRST so equal z-index visuals still paint above a ghost. */}
         {truth && <img className={`truth-img ${truth.mode}`} src={truth.dataUrl} alt="" draggable={false} />}
-        {page.visuals.map((v) => (
-          <VisualBox
-            key={v.id}
-            visual={v}
-            theme={theme}
-            selected={!layoutMode && v.id === selectedVisualId}
-            onSelect={onSelectVisual}
-            rect={layoutMode ? rectOf(v) : undefined}
-            inert={layoutMode}
-          />
-        ))}
+        {page.visuals.map((v) => {
+          // Groups have nothing to show; hidden visuals would duplicate the
+          // pixels of whatever is visible at the same spot (bookmark swaps).
+          const orig = sprites && !v.isHidden && v.visualType !== 'visualGroup' ? sprites.rects[v.id] : undefined
+          return (
+            <VisualBox
+              key={v.id}
+              visual={v}
+              theme={theme}
+              selected={!layoutMode && v.id === selectedVisualId}
+              onSelect={onSelectVisual}
+              rect={layoutMode ? rectOf(v) : undefined}
+              inert={layoutMode}
+              sprite={orig && sprites ? { dataUrl: sprites.dataUrl, orig, pageW: page.width, pageH: page.height } : undefined}
+            />
+          )
+        })}
       </div>
 
       {layout && (
