@@ -64,12 +64,13 @@ for (const pack of PACKS) {
     for (let b = a + 1; b < solid.length; b++)
       if (overlapArea(rects[solid[a]], rects[solid[b]]) > 1) collisions++
   check(`${pack.id}: no slot collisions`, collisions === 0, `${collisions} overlaps`)
-  // KPI band is uniform.
+  // KPI cards are uniformly sized (alignment shape varies per pack: band,
+  // multi-row band, or side column — sizing consistency is the invariant).
   const kpiRects = byRole('kpi').map((k) => rects[k.v.id])
   check(
-    `${pack.id}: KPI band uniform + aligned`,
-    kpiRects.every((r) => Math.abs(r.h - kpiRects[0].h) <= 1 && Math.abs(r.y - kpiRects[0].y) <= 1) &&
-      Math.max(...kpiRects.map((r) => r.w)) - Math.min(...kpiRects.map((r) => r.w)) <= 2,
+    `${pack.id}: KPI cards uniformly sized`,
+    Math.max(...kpiRects.map((r) => r.w)) - Math.min(...kpiRects.map((r) => r.w)) <= 2 &&
+      Math.max(...kpiRects.map((r) => r.h)) - Math.min(...kpiRects.map((r) => r.h)) <= 2,
   )
   // Swap partner mirrors its leader exactly.
   const sw = swaps[0]
@@ -78,13 +79,15 @@ for (const pack of PACKS) {
     const b = rects[sw.swapWith!]
     check(`${pack.id}: swap partner shares the slot`, !!a && !!b && a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h)
   }
-  // Companion keeps its offset to the host.
+  // Companion keeps its PROPORTIONAL anchor on the host (top-right stays
+  // top-right even when the host lands in a narrower slot).
   const comp = companions[0]
   if (comp) {
     const host = items.find((i) => i.v.id === comp.companionOf)!
-    const oldOff = comp.v.position.x - host.v.position.x
-    const newOff = rects[comp.v.id].x - rects[comp.companionOf!].x
-    check(`${pack.id}: companion keeps host offset`, Math.abs(oldOff - newOff) <= 1, `${oldOff.toFixed(1)} vs ${newOff.toFixed(1)}`)
+    const oldFrac = (comp.v.position.x - host.v.position.x) / host.v.position.width
+    const hostNew = rects[comp.companionOf!]
+    const newFrac = (rects[comp.v.id].x - hostNew.x) / hostNew.w
+    check(`${pack.id}: companion keeps host anchor`, Math.abs(oldFrac - newFrac) <= 0.03, `${oldFrac.toFixed(3)} vs ${newFrac.toFixed(3)}`)
   }
 }
 check('app-shell uses the left slicer rail', (() => {
@@ -92,6 +95,60 @@ check('app-shell uses the left slicer rail', (() => {
   const slicerXs = byRole('slicer').map((s) => rects[s.v.id].x)
   return slicerXs.every((x) => x <= 20)
 })())
+
+// ---------------------------------------------------------------------------
+// Full matrix: every pack × several real pages, generic invariants.
+// ---------------------------------------------------------------------------
+console.log('\nMatrix: every pack × real pages')
+const MATRIX_PAGES = ['The Executive Dashboard', 'Case Detail', 'Claim Detail', 'Insurance Claims Analysis', 'Tooltip']
+for (const pageName of MATRIX_PAGES) {
+  const page = model.pages.find((p) => p.displayName === pageName)
+  if (!page) {
+    check(`page exists: ${pageName}`, false)
+    continue
+  }
+  const cls = classifyPage(page)
+  const movable = cls.filter((i) => !['decor', 'group'].includes(i.role) || i.swapWith || i.companionOf)
+  const followers = new Set(cls.filter((i) => i.swapWith || i.companionOf).map((i) => i.v.id))
+  let pageOk = true
+  const problems: string[] = []
+  for (const pack of PACKS) {
+    const rects = composePage(page, cls, pack.id)
+    const ids = Object.keys(rects)
+    // Every movable, non-follower visual must be placed.
+    const expected = cls.filter((i) => !['decor', 'group'].includes(i.role) && !i.swapWith && !i.companionOf)
+    const missing = expected.filter((i) => !rects[i.v.id])
+    if (missing.length) {
+      pageOk = false
+      problems.push(`${pack.id}: ${missing.length} unplaced`)
+    }
+    // In-bounds.
+    if (!ids.every((id) => {
+      const r = rects[id]
+      return r.x >= 0 && r.y >= 0 && r.x + r.w <= page.width + 0.5 && r.y + r.h <= page.height + 0.5 && r.w > 0 && r.h > 0
+    })) {
+      pageOk = false
+      problems.push(`${pack.id}: out of bounds`)
+    }
+    // No collisions among solid (non-follower) placed visuals — skip the tiny
+    // tooltip canvas where bands legitimately compress.
+    if (page.height >= 420) {
+      const solid = ids.filter((id) => !followers.has(id))
+      for (let a = 0; a < solid.length; a++) {
+        for (let b = a + 1; b < solid.length; b++) {
+          if (overlapArea(rects[solid[a]], rects[solid[b]]) > 1) {
+            pageOk = false
+            problems.push(`${pack.id}: ${solid[a].slice(0, 6)}×${solid[b].slice(0, 6)} collide`)
+            a = solid.length // bail this pack
+            break
+          }
+        }
+      }
+    }
+  }
+  check(`${pageName} (${page.visuals.length} visuals): all 8 packs clean`, pageOk, problems.slice(0, 3).join('; '))
+  void movable
+}
 
 console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`}`)
 process.exit(failures === 0 ? 0 : 1)

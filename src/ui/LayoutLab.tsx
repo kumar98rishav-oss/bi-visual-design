@@ -4,10 +4,73 @@ import {
   AlignHorizontalSpaceAround, AlignVerticalSpaceAround,
   Undo2, Redo2, SquarePlus, LayoutTemplate,
 } from 'lucide-react'
+import type { ReactNode } from 'react'
 import type { AlignEdge, DistAxis, MatchDim, Rect } from '../layout/geometry.ts'
 import type { Layer } from '../designer/layers.ts'
 import { PACKS, type PackId } from '../designer/compose.ts'
 import { LayersPanel } from './LayersPanel.tsx'
+
+/** 64×40 wireframe thumbnails, one per pack. */
+const PACK_THUMBS: Record<PackId, ReactNode> = {
+  'exec-hero': (
+    <>
+      <rect x="2" y="2" width="60" height="5" rx="1" />
+      <rect x="2" y="9" width="13" height="7" rx="1" /><rect x="18" y="9" width="13" height="7" rx="1" /><rect x="33" y="9" width="13" height="7" rx="1" /><rect x="49" y="9" width="13" height="7" rx="1" />
+      <rect x="2" y="18" width="36" height="20" rx="1" />
+      <rect x="41" y="18" width="21" height="9" rx="1" /><rect x="41" y="29" width="21" height="9" rx="1" />
+    </>
+  ),
+  'app-shell': (
+    <>
+      <rect x="2" y="2" width="10" height="36" rx="1" />
+      <rect x="15" y="2" width="47" height="5" rx="1" />
+      <rect x="15" y="9" width="14" height="7" rx="1" /><rect x="31" y="9" width="14" height="7" rx="1" /><rect x="47" y="9" width="15" height="7" rx="1" />
+      <rect x="15" y="18" width="28" height="20" rx="1" /><rect x="46" y="18" width="16" height="20" rx="1" />
+    </>
+  ),
+  'kpi-focus': (
+    <>
+      <rect x="2" y="2" width="60" height="4" rx="1" />
+      <rect x="2" y="8" width="19" height="12" rx="1" /><rect x="23" y="8" width="19" height="12" rx="1" /><rect x="44" y="8" width="18" height="12" rx="1" />
+      <rect x="2" y="23" width="29" height="15" rx="1" /><rect x="33" y="23" width="29" height="15" rx="1" />
+    </>
+  ),
+  'chart-grid': (
+    <>
+      <rect x="2" y="2" width="60" height="4" rx="1" />
+      <rect x="2" y="8" width="19" height="14" rx="1" /><rect x="23" y="8" width="19" height="14" rx="1" /><rect x="44" y="8" width="18" height="14" rx="1" />
+      <rect x="2" y="24" width="19" height="14" rx="1" /><rect x="23" y="24" width="19" height="14" rx="1" /><rect x="44" y="24" width="18" height="14" rx="1" />
+    </>
+  ),
+  'detail-master': (
+    <>
+      <rect x="2" y="2" width="10" height="36" rx="1" />
+      <rect x="15" y="2" width="47" height="5" rx="1" />
+      <rect x="15" y="9" width="31" height="29" rx="1" />
+      <rect x="48" y="9" width="14" height="8" rx="1" /><rect x="48" y="19" width="14" height="8" rx="1" /><rect x="48" y="29" width="14" height="9" rx="1" />
+    </>
+  ),
+  'report-list': (
+    <>
+      <rect x="2" y="2" width="60" height="4" rx="1" />
+      <rect x="2" y="8" width="13" height="8" rx="1" /><rect x="18" y="8" width="13" height="8" rx="1" /><rect x="33" y="8" width="13" height="8" rx="1" /><rect x="49" y="8" width="13" height="8" rx="1" />
+      <rect x="2" y="19" width="60" height="19" rx="1" />
+    </>
+  ),
+  spotlight: (
+    <>
+      <rect x="2" y="2" width="60" height="4" rx="1" />
+      <rect x="2" y="8" width="44" height="30" rx="1" />
+      <rect x="49" y="8" width="13" height="14" rx="1" /><rect x="49" y="24" width="13" height="14" rx="1" />
+    </>
+  ),
+  comparison: (
+    <>
+      <rect x="2" y="2" width="60" height="4" rx="1" />
+      <rect x="2" y="8" width="29" height="30" rx="1" /><rect x="33" y="8" width="29" height="30" rx="1" />
+    </>
+  ),
+}
 
 interface Props {
   selectionCount: number
@@ -84,23 +147,24 @@ export function LayoutLab(props: Props) {
 
       <section className="tl-section">
         <div className="tl-section-head"><LayoutTemplate size={13} /> Compose</div>
-        <div className="compose-packs">
-          {PACKS.map((p) => (
-            <button key={p.id} className="compose-pack" onClick={() => onCompose(p.id)} title={p.blurb}>
-              <span className="compose-pack-thumb" data-pack={p.id} aria-hidden>
-                {p.id === 'exec-hero' ? (
-                  <svg viewBox="0 0 64 40"><rect x="2" y="2" width="60" height="5" rx="1"/><rect x="2" y="9" width="13" height="7" rx="1"/><rect x="18" y="9" width="13" height="7" rx="1"/><rect x="33" y="9" width="13" height="7" rx="1"/><rect x="49" y="9" width="13" height="7" rx="1"/><rect x="2" y="18" width="36" height="20" rx="1"/><rect x="41" y="18" width="21" height="9" rx="1"/><rect x="41" y="29" width="21" height="9" rx="1"/></svg>
-                ) : (
-                  <svg viewBox="0 0 64 40"><rect x="2" y="2" width="10" height="36" rx="1"/><rect x="15" y="2" width="47" height="5" rx="1"/><rect x="15" y="9" width="14" height="7" rx="1"/><rect x="31" y="9" width="14" height="7" rx="1"/><rect x="47" y="9" width="15" height="7" rx="1"/><rect x="15" y="18" width="28" height="20" rx="1"/><rect x="46" y="18" width="16" height="20" rx="1"/></svg>
-                )}
-              </span>
-              <span className="compose-pack-body">
-                <span className="compose-pack-name">{p.name}</span>
-                <span className="compose-pack-blurb">{p.blurb}</span>
-              </span>
-            </button>
-          ))}
-        </div>
+        {(['dashboard', 'page'] as const).map((cat) => (
+          <div key={cat} className="compose-group">
+            <div className="compose-group-head">{cat === 'dashboard' ? 'Dashboards' : 'Page layouts'}</div>
+            <div className="compose-packs">
+              {PACKS.filter((p) => p.category === cat).map((p) => (
+                <button key={p.id} className="compose-pack" onClick={() => onCompose(p.id)} title={p.blurb}>
+                  <span className="compose-pack-thumb" aria-hidden>
+                    <svg viewBox="0 0 64 40">{PACK_THUMBS[p.id]}</svg>
+                  </span>
+                  <span className="compose-pack-body">
+                    <span className="compose-pack-name">{p.name}</span>
+                    <span className="compose-pack-blurb">{p.blurb}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
         <p className="tl-note">Rearranges this page into the pack's layout — swap groups and bookmark buttons travel correctly. Undo any time.</p>
       </section>
 

@@ -703,6 +703,13 @@ input[type='color']::-webkit-color-swatch { border: none; border-radius: 4px; }
 .capdlg-actions .btn { display: inline-flex; align-items: center; gap: 6px; }
 
 /* ---------- Compose packs ---------- */
+.compose-group { margin-bottom: 10px; }
+.compose-group-head {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
 .compose-packs { display: flex; flex-direction: column; gap: 8px; }
 .compose-pack {
   display: flex;
