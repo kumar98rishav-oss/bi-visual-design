@@ -115,6 +115,68 @@ export async function openProjectFolder(): Promise<OpenedProject> {
 export interface WriteResult {
   path: string
   backedUpTo: string
+  /** False when the file did not exist before (nothing to back up). */
+  replaced: boolean
+}
+
+/** Read a file as bytes (used to restore binary assets on rollback). */
+export async function readBytes(root: FileSystemDirectoryHandle, path: string): Promise<ArrayBuffer | null> {
+  const handle = await getFile(root, path)
+  if (!handle) return null
+  return await (await handle.getFile()).arrayBuffer()
+}
+
+/** True when the path exists. */
+export async function fileExists(root: FileSystemDirectoryHandle, path: string): Promise<boolean> {
+  return (await getFile(root, path)) !== null
+}
+
+/**
+ * Delete a file. Used by rollback to remove visuals a deploy created — the
+ * only correct way to undo a creation, since PBIR discovers visuals by folder.
+ */
+export async function deleteFile(root: FileSystemDirectoryHandle, path: string): Promise<boolean> {
+  const segs = segments(path)
+  const name = segs.pop()
+  if (!name) return false
+  let dir = root
+  for (const seg of segs) {
+    try {
+      dir = await dir.getDirectoryHandle(seg)
+    } catch {
+      return false
+    }
+  }
+  try {
+    await dir.removeEntry(name)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Remove a visual's folder entirely (visual.json plus anything beside it), so
+ * rollback leaves no empty directories behind.
+ */
+export async function deleteDir(root: FileSystemDirectoryHandle, path: string): Promise<boolean> {
+  const segs = segments(path)
+  const name = segs.pop()
+  if (!name) return false
+  let dir = root
+  for (const seg of segs) {
+    try {
+      dir = await dir.getDirectoryHandle(seg)
+    } catch {
+      return false
+    }
+  }
+  try {
+    await dir.removeEntry(name, { recursive: true })
+    return true
+  } catch {
+    return false
+  }
 }
 
 /**
@@ -128,24 +190,28 @@ export interface WriteResult {
 export async function writeFileSafely(
   root: FileSystemDirectoryHandle,
   path: string,
-  json: string,
+  content: string | Blob,
   backupStamp: string,
+  opts: { validateJson?: boolean } = {},
 ): Promise<WriteResult> {
-  // Guard: never write text that isn't valid JSON.
-  try {
-    JSON.parse(json)
-  } catch (e) {
-    throw new Error(`Refusing to write invalid JSON to ${path}: ${(e as Error).message}`)
+  // Text defaults to JSON validation; binary assets (background PNGs) opt out.
+  const validateJson = opts.validateJson ?? typeof content === 'string'
+  if (validateJson && typeof content === 'string') {
+    try {
+      JSON.parse(content)
+    } catch (e) {
+      throw new Error(`Refusing to write invalid JSON to ${path}: ${(e as Error).message}`)
+    }
   }
 
   const backupDir = `.bi-visual-design-backup/${backupStamp}`
 
-  // Back up existing contents (if the file already exists).
+  // Back up existing contents (if the file already exists). Copied as bytes so
+  // the same path works for JSON and images alike.
   const existing = await getFile(root, path)
   if (existing) {
-    const prev = await (await existing.getFile()).text()
-    const backupPath = `${backupDir}/${path}`
-    const backupHandle = await getFile(root, backupPath, true)
+    const prev = await (await existing.getFile()).arrayBuffer()
+    const backupHandle = await getFile(root, `${backupDir}/${path}`, true)
     if (backupHandle) {
       const w = await backupHandle.createWritable()
       await w.write(prev)
@@ -157,8 +223,8 @@ export async function writeFileSafely(
   const target = await getFile(root, path, true)
   if (!target) throw new Error(`Could not open ${path} for writing.`)
   const writable = await target.createWritable()
-  await writable.write(json)
+  await writable.write(content)
   await writable.close()
 
-  return { path, backedUpTo: `${backupDir}/${path}` }
+  return { path, backedUpTo: `${backupDir}/${path}`, replaced: !!existing }
 }
