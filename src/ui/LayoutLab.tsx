@@ -2,10 +2,11 @@ import {
   AlignStartVertical, AlignCenterVertical, AlignEndVertical,
   AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal,
   AlignHorizontalSpaceAround, AlignVerticalSpaceAround,
-  Undo2, Redo2, SquarePlus,
+  Undo2, Redo2, SquarePlus, LayoutTemplate,
 } from 'lucide-react'
 import type { AlignEdge, DistAxis, MatchDim, Rect } from '../layout/geometry.ts'
 import type { Layer } from '../designer/layers.ts'
+import { PACKS, type PackId } from '../designer/compose.ts'
 import { LayersPanel } from './LayersPanel.tsx'
 
 interface Props {
@@ -38,6 +39,7 @@ interface Props {
   onBringToFront: (id: string) => void
   onSendToBack: (id: string) => void
   onAddPanel: () => void
+  onCompose: (pack: PackId) => void
 }
 
 function Num({ label, value, onChange }: { label: string; value: number; onChange: (n: number) => void }) {
@@ -62,6 +64,7 @@ export function LayoutLab(props: Props) {
     canUndo, canRedo, onSetRect, onAlign, onDistribute, onMatch, onToggleGrid, onToggleShowGrid,
     onUndo, onRedo, onReset, onDeploy,
     layers, selectedLayer, onSelectLayer, onBringForward, onSendBackward, onBringToFront, onSendToBack, onAddPanel,
+    onCompose,
   } = props
 
   const multi = selectionCount >= 2
@@ -78,6 +81,28 @@ export function LayoutLab(props: Props) {
         </div>
         {dirty && <span className="tl-dirty" title="Unsaved layout edits">● {changedCount} pending</span>}
       </div>
+
+      <section className="tl-section">
+        <div className="tl-section-head"><LayoutTemplate size={13} /> Compose</div>
+        <div className="compose-packs">
+          {PACKS.map((p) => (
+            <button key={p.id} className="compose-pack" onClick={() => onCompose(p.id)} title={p.blurb}>
+              <span className="compose-pack-thumb" data-pack={p.id} aria-hidden>
+                {p.id === 'exec-hero' ? (
+                  <svg viewBox="0 0 64 40"><rect x="2" y="2" width="60" height="5" rx="1"/><rect x="2" y="9" width="13" height="7" rx="1"/><rect x="18" y="9" width="13" height="7" rx="1"/><rect x="33" y="9" width="13" height="7" rx="1"/><rect x="49" y="9" width="13" height="7" rx="1"/><rect x="2" y="18" width="36" height="20" rx="1"/><rect x="41" y="18" width="21" height="9" rx="1"/><rect x="41" y="29" width="21" height="9" rx="1"/></svg>
+                ) : (
+                  <svg viewBox="0 0 64 40"><rect x="2" y="2" width="10" height="36" rx="1"/><rect x="15" y="2" width="47" height="5" rx="1"/><rect x="15" y="9" width="14" height="7" rx="1"/><rect x="31" y="9" width="14" height="7" rx="1"/><rect x="47" y="9" width="15" height="7" rx="1"/><rect x="15" y="18" width="28" height="20" rx="1"/><rect x="46" y="18" width="16" height="20" rx="1"/></svg>
+                )}
+              </span>
+              <span className="compose-pack-body">
+                <span className="compose-pack-name">{p.name}</span>
+                <span className="compose-pack-blurb">{p.blurb}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+        <p className="tl-note">Rearranges this page into the pack's layout — swap groups and bookmark buttons travel correctly. Undo any time.</p>
+      </section>
 
       <section className="tl-section">
         <div className="tl-section-head">Position</div>

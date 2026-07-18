@@ -12,6 +12,8 @@ import { analyzeReport, type DoctorRule, type Finding } from './doctor/analyze.t
 import { applyDoctorEdits, type DoctorEdits } from './doctor/apply.ts'
 import { deployDoctor } from './doctor/deploy.ts'
 import { buildLayers, bringForward, sendBackward, bringToFront, sendToBack, assignZ, changedZ } from './designer/layers.ts'
+import { classifyPage } from './designer/classify.ts'
+import { composePage, type PackId } from './designer/compose.ts'
 import { applyDesignerEdits, panelToNode, type PendingPanel } from './designer/apply.ts'
 import { buildPanel } from './designer/shapes.ts'
 import { mintId } from './designer/ids.ts'
@@ -268,6 +270,20 @@ export default function App() {
       commitDraft(next)
     },
     [rectOf, commitDraft],
+  )
+
+  // Compose (M5.2): classify the active page and pack it into a designed
+  // layout. The result lands in the layout draft, so live preview (sprites
+  // included), undo/redo and the existing deploy path all come for free.
+  const onCompose = useCallback(
+    (pack: PackId) => {
+      if (!activePage) return
+      const items = classifyPage(activePage)
+      const rects = composePage(activePage, items, pack)
+      commitDraft({ ...layoutDraftRef.current, ...rects })
+      setSelection(new Set())
+    },
+    [activePage, commitDraft, setSelection],
   )
 
   const onAlign = useCallback((edge: AlignEdge) => applyToSelection((r) => alignRects(r, edge)), [applyToSelection])
@@ -778,6 +794,7 @@ export default function App() {
             onBringToFront={onBringToFrontLayer}
             onSendToBack={onSendToBackLayer}
             onAddPanel={onAddPanel}
+            onCompose={onCompose}
           />
         ) : view === 'doctor' ? (
           <DesignDoctor
