@@ -28,11 +28,17 @@ interface Props {
   onSelectVisual: (id: string | null) => void
   /** Present only in Layout mode. */
   layout?: LayoutProps
+  /**
+   * True View: a captured Desktop snapshot of this page. 'truth' shows the
+   * real pixels instead of the mirror; 'ghost' underlays them at half opacity
+   * so edits can be lined up against reality.
+   */
+  truth?: { dataUrl: string; mode: 'truth' | 'ghost' }
 }
 
 const toRect = (v: VisualNode): Rect => ({ x: v.position.x, y: v.position.y, w: v.position.width, h: v.position.height })
 
-export function PageCanvas({ page, theme, scale, selectedVisualId, onSelectVisual, layout }: Props) {
+export function PageCanvas({ page, theme, scale, selectedVisualId, onSelectVisual, layout, truth }: Props) {
   const chrome = useMemo(() => readPageChrome(page, theme), [page, theme])
   const layoutMode = !!layout
   const rectOf = (v: VisualNode): Rect => layout?.draftRects[v.id] ?? toRect(v)
@@ -44,7 +50,7 @@ export function PageCanvas({ page, theme, scale, selectedVisualId, onSelectVisua
       onClick={() => !layoutMode && onSelectVisual(null)}
     >
       <div
-        className={`page-canvas${layoutMode ? ' layout-mode' : ''}`}
+        className={`page-canvas${layoutMode ? ' layout-mode' : ''}${truth?.mode === 'truth' ? ' truth' : ''}`}
         style={{
           width: page.width,
           height: page.height,
@@ -52,6 +58,8 @@ export function PageCanvas({ page, theme, scale, selectedVisualId, onSelectVisua
           background: chrome.background ?? 'var(--art-page-bg)',
         }}
       >
+        {/* Rendered FIRST so equal z-index visuals still paint above a ghost. */}
+        {truth && <img className={`truth-img ${truth.mode}`} src={truth.dataUrl} alt="" draggable={false} />}
         {page.visuals.map((v) => (
           <VisualBox
             key={v.id}

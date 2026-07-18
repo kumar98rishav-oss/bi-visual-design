@@ -591,6 +591,101 @@ input[type='color']::-webkit-color-swatch { border: none; border-radius: 4px; }
 .ll-history { display: flex; gap: 8px; margin-top: var(--space-3); }
 .ll-history .btn { flex: 1 1 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 
+/* ---------- True View (captured Desktop pixels) ---------- */
+.truth-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  user-select: none;
+}
+.truth-img.ghost { opacity: 0.5; }
+.truth-img.truth { z-index: 5000; }
+/* In truth mode the mirror's own boxes step aside — the page IS the capture. */
+.page-canvas.truth .visual-box { visibility: hidden; }
+
+.truth-cluster {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+.stage-hint + .truth-cluster { margin-left: 12px; }
+.truth-select {
+  font: inherit;
+  font-size: var(--text-sm);
+  padding: 4px 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+}
+
+/* ---------- Capture dialog ---------- */
+.capdlg-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: grid;
+  place-items: center;
+  background: var(--scrim);
+}
+.capdlg {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-pop);
+  padding: var(--space-4);
+  max-width: 920px;
+  width: calc(100vw - 48px);
+}
+.capdlg-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+.capdlg-stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  background: var(--surface-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  min-height: 200px;
+  overflow: hidden;
+}
+.capdlg-frame { display: block; }
+.capdlg-crop {
+  position: absolute;
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 0 9999px color-mix(in srgb, var(--scrim) 65%, transparent);
+  cursor: move;
+  touch-action: none;
+}
+.capdlg-handle {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  background: var(--surface);
+  border: 2px solid var(--accent);
+  border-radius: 2px;
+}
+.capdlg-handle.nw { top: -6px; left: -6px; cursor: nwse-resize; }
+.capdlg-handle.ne { top: -6px; right: -6px; cursor: nesw-resize; }
+.capdlg-handle.sw { bottom: -6px; left: -6px; cursor: nesw-resize; }
+.capdlg-handle.se { bottom: -6px; right: -6px; cursor: nwse-resize; }
+.capdlg-wait { padding: var(--space-6); color: var(--text-subtle); font-size: var(--text-md); }
+.capdlg-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: var(--space-3);
+}
+.capdlg-actions .btn { display: inline-flex; align-items: center; gap: 6px; }
+
 /* ---------- Layers panel ---------- */
 .layers { display: flex; flex-direction: column; gap: 8px; }
 .layers-actions { display: flex; gap: 4px; }

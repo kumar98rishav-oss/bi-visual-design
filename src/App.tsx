@@ -16,6 +16,8 @@ import { applyDesignerEdits, panelToNode, type PendingPanel } from './designer/a
 import { buildPanel } from './designer/shapes.ts'
 import { mintId } from './designer/ids.ts'
 import { deployDesigner, newVisualEdits, zEdits } from './designer/deploy.ts'
+import { connectDesktopCapture, isCaptureSupported, type CropRect, type DesktopCapture, type PageSnapshot } from './truth/capture.ts'
+import { CaptureDialog } from './ui/CaptureDialog.tsx'
 import { PageCanvas } from './render/PageCanvas.tsx'
 import { Landing } from './ui/Landing.tsx'
 import { Sidebar } from './ui/Sidebar.tsx'
@@ -77,6 +79,13 @@ export default function App() {
   const [pendingPanels, setPendingPanels] = useState<PendingPanel[]>([])
   const [zOverrides, setZOverrides] = useState<Record<string, number>>({})
   const designerDirty = pendingPanels.length > 0 || Object.keys(zOverrides).length > 0
+
+  // True View (M6.0): captured Desktop pixels per page
+  const [capture, setCapture] = useState<DesktopCapture | null>(null)
+  const [snapshots, setSnapshots] = useState<Record<string, PageSnapshot>>({})
+  const [truthMode, setTruthMode] = useState<'off' | 'truth' | 'ghost'>('off')
+  const [captureDialogOpen, setCaptureDialogOpen] = useState(false)
+  const lastCropRef = useRef<CropRect | null>(null)
 
   const layoutDraftRef = useRef<DraftMap>({})
   const selectionRef = useRef<Set<string>>(selection)
@@ -472,6 +481,42 @@ export default function App() {
     }
   }, [handle, doctorEdits, doctorEditedCount, originalById])
 
+  // --- True View: connect / capture / disconnect (M6.0) ---
+  const onConnectCapture = useCallback(async () => {
+    try {
+      const c = await connectDesktopCapture()
+      c.onEnded(() => setCapture(null))
+      setCapture(c)
+      setCaptureDialogOpen(true)
+    } catch (e) {
+      // The user closing Chrome's picker is a normal path, not an error.
+      if ((e as Error).name !== 'NotAllowedError') setError((e as Error).message)
+    }
+  }, [])
+
+  const onCaptured = useCallback(
+    (dataUrl: string, crop: CropRect) => {
+      if (!activePage) return
+      lastCropRef.current = crop
+      setSnapshots((prev) => ({ ...prev, [activePage.id]: { dataUrl, at: Date.now(), crop } }))
+      setCaptureDialogOpen(false)
+      setTruthMode((m) => (m === 'off' ? 'truth' : m))
+    },
+    [activePage],
+  )
+
+  const onDisconnectCapture = useCallback(() => {
+    capture?.stop()
+    setCapture(null)
+  }, [capture])
+
+  const activeSnapshot = activePage ? snapshots[activePage.id] : undefined
+  // Layout mode keeps the overlay interactive, so truth downgrades to ghost there.
+  const truthForStage =
+    activeSnapshot && truthMode !== 'off'
+      ? { dataUrl: activeSnapshot.dataUrl, mode: (view === 'layout' && truthMode === 'truth' ? 'ghost' : truthMode) as 'truth' | 'ghost' }
+      : undefined
+
   // --- Designer: layers, restacking, panel minting (M5.1) ---
   const layers = useMemo(() => (activePage ? buildLayers(activePage.visuals) : []), [activePage])
   const layerOrder = useMemo(() => layers.map((l) => l.id), [layers])
@@ -602,6 +647,40 @@ export default function App() {
             )}
             {view === 'layout' && <span className="stage-hint">Drag to move · Shift-click to multi-select · arrows to nudge</span>}
             {view === 'doctor' && <span className="stage-hint">Fixes preview here live · deploy writes them back</span>}
+
+            <span className="truth-cluster">
+              {activeSnapshot && (
+                <select
+                  className="truth-select"
+                  value={truthMode}
+                  onChange={(e) => setTruthMode(e.target.value as 'off' | 'truth' | 'ghost')}
+                  title="How to show the captured Desktop pixels"
+                >
+                  <option value="off">Mirror</option>
+                  <option value="truth">Desktop pixels</option>
+                  <option value="ghost">Ghost overlay</option>
+                </select>
+              )}
+              {capture ? (
+                <>
+                  <button className="btn small" onClick={() => setCaptureDialogOpen(true)}>
+                    Capture page
+                  </button>
+                  <button className="btn small" onClick={onDisconnectCapture} title="Stop sharing the Desktop window">
+                    Disconnect
+                  </button>
+                </>
+              ) : (
+                <button
+                  className="btn small"
+                  onClick={onConnectCapture}
+                  disabled={!isCaptureSupported()}
+                  title="Share your Power BI Desktop window to see the report exactly as Desktop renders it"
+                >
+                  Connect Desktop view
+                </button>
+              )}
+            </span>
           </div>
           <div className="stage" ref={stageRef}>
             {activePage ? (
@@ -623,6 +702,7 @@ export default function App() {
                   scale={scale}
                   selectedVisualId={selectedVisualId}
                   onSelectVisual={setSelectedVisualId}
+                  truth={truthForStage}
                   layout={
                     view === 'layout'
                       ? {
@@ -700,6 +780,17 @@ export default function App() {
           <Inspector report={report} page={activePage} visual={selectedVisual} scale={scale} />
         )}
       </div>
+
+      {captureDialogOpen && capture && activePage && (
+        <CaptureDialog
+          capture={capture}
+          aspect={activePage.width / activePage.height}
+          pageName={activePage.displayName}
+          initialCrop={lastCropRef.current}
+          onCapture={onCaptured}
+          onCancel={() => setCaptureDialogOpen(false)}
+        />
+      )}
     </div>
   )
 }
