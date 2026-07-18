@@ -20,6 +20,9 @@ import { mintId } from './designer/ids.ts'
 import { deployDesigner, newVisualEdits, zEdits } from './designer/deploy.ts'
 import { connectDesktopCapture, isCaptureSupported, type CropRect, type DesktopCapture, type PageSnapshot } from './truth/capture.ts'
 import { CaptureDialog } from './ui/CaptureDialog.tsx'
+import { packById, previewOf } from './style/packs.ts'
+import { deployStyle } from './style/deploy.ts'
+import { StyleLab } from './ui/StyleLab.tsx'
 import { PageCanvas } from './render/PageCanvas.tsx'
 import { Landing } from './ui/Landing.tsx'
 import { Sidebar } from './ui/Sidebar.tsx'
@@ -31,7 +34,7 @@ import { Topbar } from './ui/Topbar.tsx'
 
 const CANVAS_MARGIN = 32
 const GRID = 8
-type View = 'mirror' | 'theme' | 'layout' | 'doctor'
+type View = 'mirror' | 'theme' | 'layout' | 'doctor' | 'style'
 type AppTheme = 'light' | 'dark'
 type DraftMap = Record<string, Rect>
 interface Hist { stack: DraftMap[]; at: number }
@@ -86,6 +89,10 @@ export default function App() {
   const [capture, setCapture] = useState<DesktopCapture | null>(null)
   const [snapshots, setSnapshots] = useState<Record<string, PageSnapshot>>({})
   const [truthMode, setTruthMode] = useState<'off' | 'truth' | 'ghost' | 'sprites'>('off')
+
+  // Style Lab: the selected pack previews live and deploys to the theme file.
+  const [stylePackId, setStylePackId] = useState<string | null>(null)
+  const [deployingStyle, setDeployingStyle] = useState(false)
   const [captureDialogOpen, setCaptureDialogOpen] = useState(false)
   const lastCropRef = useRef<CropRect | null>(null)
 
@@ -115,8 +122,19 @@ export default function App() {
     [baseReport, pendingPanels, zOverrides],
   )
   const activePage = effectiveReport?.pages.find((p) => p.id === activePageId) ?? effectiveReport?.pages[0] ?? null
-  const effectiveTheme = themeDraft ?? report?.theme ?? null
   const originalTheme = report?.theme ?? null
+
+  // A selected style pack overrides the palette for preview; the mirror's
+  // theme resolution then recolours every chart and the page canvas.
+  const stylePack = stylePackId ? packById(stylePackId) : undefined
+  const stylePreview = stylePack ? previewOf(stylePack) : undefined
+  const effectiveTheme = useMemo(() => {
+    const base = themeDraft ?? report?.theme ?? null
+    if (!stylePack) return base
+    return base
+      ? { ...base, dataColors: [...stylePack.dataColors], background: stylePack.background, foreground: stylePack.foreground, tableAccent: stylePack.tableAccent }
+      : base
+  }, [themeDraft, report, stylePack])
 
   const findings = useMemo<Finding[]>(
     () => (view === 'doctor' && effectiveReport ? analyzeReport(effectiveReport) : []),
@@ -257,6 +275,22 @@ export default function App() {
   const resetTheme = useCallback(() => {
     if (originalTheme) setThemeDraft(cloneTheme(originalTheme))
   }, [originalTheme])
+
+  const onDeployStyle = useCallback(async () => {
+    if (!handle || !stylePack || !report?.theme) return
+    setDeployingStyle(true)
+    setError(null)
+    setNotice(null)
+    try {
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+      const out = await deployStyle(handle, report.theme, stylePack, stamp)
+      setNotice(`Applied “${stylePack.name}” to ${out.path}. Backup at ${out.backedUpTo}. Close and reopen the report in Power BI Desktop to see it.`)
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setDeployingStyle(false)
+    }
+  }, [handle, stylePack, report])
 
   // --- Layout operations ---
   const applyToSelection = useCallback(
@@ -733,6 +767,7 @@ export default function App() {
                   onSelectVisual={setSelectedVisualId}
                   truth={truthForStage}
                   sprites={spritesForStage}
+                  style={stylePreview}
                   layout={
                     view === 'layout'
                       ? {
@@ -795,6 +830,14 @@ export default function App() {
             onSendToBack={onSendToBackLayer}
             onAddPanel={onAddPanel}
             onCompose={onCompose}
+          />
+        ) : view === 'style' ? (
+          <StyleLab
+            selected={stylePackId}
+            canDeploy={!!handle && !!report?.theme}
+            deploying={deployingStyle}
+            onSelect={setStylePackId}
+            onDeploy={onDeployStyle}
           />
         ) : view === 'doctor' ? (
           <DesignDoctor

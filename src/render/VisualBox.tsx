@@ -4,6 +4,7 @@
 import { useMemo } from 'react'
 import type { Theme, VisualNode } from '../pbir/types.ts'
 import type { Rect } from '../layout/geometry.ts'
+import type { StylePreview } from '../style/packs.ts'
 import { spriteStyle } from '../truth/sprites.ts'
 import { readShapeStyle, readVisualChrome } from './formatting.ts'
 import { PlaceholderVisual } from './PlaceholderVisual.tsx'
@@ -19,11 +20,13 @@ interface Props {
   inert?: boolean
   /** Live visuals: render this visual's slice of the captured page. */
   sprite?: { dataUrl: string; orig: Rect; pageW: number; pageH: number }
+  /** Style pack defaults — used only where the visual has no own formatting. */
+  style?: StylePreview
 }
 
 const TITLE_H = 24
 
-export function VisualBox({ visual, theme, selected, onSelect, rect, inert, sprite }: Props) {
+export function VisualBox({ visual, theme, selected, onSelect, rect, inert, sprite, style: sp }: Props) {
   const chrome = useMemo(() => readVisualChrome(visual, theme), [visual, theme])
   const shape = useMemo(() => readShapeStyle(visual, theme), [visual, theme])
   const pos = rect
@@ -70,13 +73,15 @@ export function VisualBox({ visual, theme, selected, onSelect, rect, inert, spri
         height: position.height,
         zIndex: position.z,
         pointerEvents: inert ? 'none' : undefined,
-        borderRadius: chrome.border.radius || (isGroup ? 0 : 4),
-        background: isGroup ? 'transparent' : chrome.background ?? 'var(--art-surface)',
+        // A style pack supplies DEFAULTS; the visual's own formatting wins.
+        borderRadius: chrome.border.radius || (isGroup ? 0 : sp?.cardRadius ?? 4),
+        background: isGroup ? 'transparent' : chrome.background ?? sp?.cardBg ?? 'var(--art-surface)',
         border: isGroup
           ? '1.5px dashed var(--art-group-border)'
           : chrome.border.show
-            ? `1px solid ${chrome.border.color ?? 'var(--art-border)'}`
-            : '1px solid var(--art-border)',
+            ? `1px solid ${chrome.border.color ?? sp?.cardBorder ?? 'var(--art-border)'}`
+            : `1px solid ${sp?.cardBorder || 'var(--art-border)'}`,
+        boxShadow: sp?.shadow ? '0 2px 10px rgba(0,0,0,0.18)' : undefined,
       }
 
   return (
@@ -109,10 +114,10 @@ export function VisualBox({ visual, theme, selected, onSelect, rect, inert, spri
           className="visual-title"
           style={{
             height: TITLE_H,
-            color: chrome.title.color,
+            color: chrome.title.color ?? sp?.titleColor,
             background: chrome.title.background,
             textAlign: chrome.title.align,
-            fontSize: chrome.title.fontSize ? Math.min(chrome.title.fontSize, 15) : undefined,
+            fontSize: chrome.title.fontSize ? Math.min(chrome.title.fontSize, 15) : sp?.titleSize,
           }}
         >
           <span className={chrome.title.dynamic ? 'dynamic-title' : ''}>

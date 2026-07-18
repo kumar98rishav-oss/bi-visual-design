@@ -15,7 +15,8 @@
     "verify:doctor": "node --experimental-strip-types scripts/verify-doctor.ts",
     "verify:designer": "node --experimental-strip-types scripts/verify-designer.ts",
     "verify:truth": "node --experimental-strip-types scripts/verify-truth.ts",
-    "verify:compose": "node --experimental-strip-types scripts/verify-compose.ts"
+    "verify:compose": "node --experimental-strip-types scripts/verify-compose.ts",
+    "verify:style": "node --experimental-strip-types scripts/verify-style.ts"
   },
   "dependencies": {
     "lucide-react": "^0.454.0",

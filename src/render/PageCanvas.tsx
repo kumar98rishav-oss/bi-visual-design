@@ -6,6 +6,7 @@
 import { useMemo } from 'react'
 import type { PageNode, Theme, VisualNode } from '../pbir/types.ts'
 import type { Rect } from '../layout/geometry.ts'
+import type { StylePreview } from '../style/packs.ts'
 import { readPageChrome } from './formatting.ts'
 import { VisualBox } from './VisualBox.tsx'
 import { LayoutOverlay, type LayoutItem } from './LayoutOverlay.tsx'
@@ -39,11 +40,13 @@ interface Props {
    * capture-time rect), so dragging a box drags the real rendered visual.
    */
   sprites?: { dataUrl: string; rects: Record<string, Rect> }
+  /** Style pack defaults previewed on visuals that don't override them. */
+  style?: StylePreview
 }
 
 const toRect = (v: VisualNode): Rect => ({ x: v.position.x, y: v.position.y, w: v.position.width, h: v.position.height })
 
-export function PageCanvas({ page, theme, scale, selectedVisualId, onSelectVisual, layout, truth, sprites }: Props) {
+export function PageCanvas({ page, theme, scale, selectedVisualId, onSelectVisual, layout, truth, sprites, style }: Props) {
   const chrome = useMemo(() => readPageChrome(page, theme), [page, theme])
   const layoutMode = !!layout
   const rectOf = (v: VisualNode): Rect => layout?.draftRects[v.id] ?? toRect(v)
@@ -79,6 +82,7 @@ export function PageCanvas({ page, theme, scale, selectedVisualId, onSelectVisua
               rect={layoutMode ? rectOf(v) : undefined}
               inert={layoutMode}
               sprite={orig && sprites ? { dataUrl: sprites.dataUrl, orig, pageW: page.width, pageH: page.height } : undefined}
+              style={style}
             />
           )
         })}
