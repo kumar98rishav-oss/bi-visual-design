@@ -27,10 +27,13 @@ export function layerKind(v: VisualNode): LayerKind {
 }
 
 function labelOf(v: VisualNode): string {
-  if (v.visualType === 'visualGroup') return v.name
-  const field = v.projections[0]
-  if (field) return `${v.visualType} · ${field.property}`
-  return v.visualType
+  const base =
+    v.visualType === 'visualGroup'
+      ? v.name
+      : v.projections[0]
+        ? `${v.visualType} · ${v.projections[0].property}`
+        : v.visualType
+  return v.isHidden ? `${base} · hidden` : base
 }
 
 /** Build the layer list for a page, ordered BACK-TO-FRONT. */

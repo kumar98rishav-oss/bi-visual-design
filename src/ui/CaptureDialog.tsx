@@ -4,8 +4,9 @@
 // remembered for the session so re-captures are one click.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Camera, RefreshCw, X } from 'lucide-react'
+import { Camera, RefreshCw, ScanSearch, X } from 'lucide-react'
 import { cropFrame, seedCrop, type CropRect, type DesktopCapture } from '../truth/capture.ts'
+import { detectFromCanvas } from '../truth/detect.ts'
 
 interface Props {
   capture: DesktopCapture
@@ -33,12 +34,21 @@ export function CaptureDialog({ capture, aspect, pageName, initialCrop, onCaptur
   // Preview scale: frame pixels → dialog pixels.
   const k = frameSize ? Math.min(PREVIEW_MAX_W / frameSize.w, PREVIEW_MAX_H / frameSize.h) : 1
 
+  const [autoFound, setAutoFound] = useState<boolean | null>(null)
+
   const refresh = useCallback(() => {
     const frame = capture.grabFrame()
     if (!frame) return
     frameRef.current = frame
     setFrameSize({ w: frame.width, h: frame.height })
-    setCrop((c) => c ?? initialCrop ?? seedCrop(frame.width, frame.height, aspect))
+    // First frame: prefer auto-detecting the canvas; fall back to the last
+    // session crop, then the centred seed.
+    setCrop((c) => {
+      if (c) return c
+      const detected = detectFromCanvas(frame, aspect)
+      setAutoFound(detected ? true : initialCrop ? null : false)
+      return detected ?? initialCrop ?? seedCrop(frame.width, frame.height, aspect)
+    })
     // Paint the scaled preview.
     const preview = canvasRef.current
     if (preview) {
@@ -49,6 +59,14 @@ export function CaptureDialog({ capture, aspect, pageName, initialCrop, onCaptur
       if (g) g.drawImage(frame, 0, 0, preview.width, preview.height)
     }
   }, [capture, aspect, initialCrop])
+
+  const autoDetect = useCallback(() => {
+    const frame = frameRef.current ?? capture.grabFrame()
+    if (!frame) return
+    const detected = detectFromCanvas(frame, aspect)
+    setAutoFound(!!detected)
+    if (detected) setCrop(detected)
+  }, [capture, aspect])
 
   useEffect(() => {
     // First frame can lag the stream start slightly.
@@ -73,6 +91,22 @@ export function CaptureDialog({ capture, aspect, pageName, initialCrop, onCaptur
     },
     [frameSize, aspect],
   )
+
+  // Arrow keys nudge the crop by 1 frame-pixel (Shift = 10) for fine alignment.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const nudges: Record<string, [number, number]> = {
+        ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1],
+      }
+      const d = nudges[e.key]
+      if (!d) return
+      e.preventDefault()
+      const step = e.shiftKey ? 10 : 1
+      setCrop((c) => (c ? clamp({ ...c, x: c.x + d[0] * step, y: c.y + d[1] * step }) : c))
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [clamp])
 
   const onMove = useCallback(
     (e: PointerEvent) => {
@@ -132,7 +166,13 @@ export function CaptureDialog({ capture, aspect, pageName, initialCrop, onCaptur
         <div className="capdlg-head">
           <div>
             <div className="tl-title">Capture “{pageName}”</div>
-            <div className="tl-sub">Drag the box so it covers only the report canvas in Power BI Desktop — not the ribbon or panes.</div>
+            <div className="tl-sub">
+              {autoFound === true
+                ? 'Report canvas auto-detected — fine-tune with the arrow keys if needed (Shift = ×10), then capture.'
+                : autoFound === false
+                  ? 'Could not auto-detect the canvas — drag the box over the report page area (not the ribbon or panes).'
+                  : 'Drag the box so it covers only the report canvas — not the ribbon or panes. Arrow keys fine-tune.'}
+            </div>
           </div>
           <button className="iconbtn" onClick={onCancel} aria-label="Close">
             <X size={16} />
@@ -175,6 +215,9 @@ export function CaptureDialog({ capture, aspect, pageName, initialCrop, onCaptur
         <div className="capdlg-actions">
           <button className="btn" onClick={refresh}>
             <RefreshCw size={14} /> Refresh frame
+          </button>
+          <button className="btn" onClick={autoDetect} title="Find the report canvas automatically">
+            <ScanSearch size={14} /> Auto-detect
           </button>
           <span style={{ flex: 1 }} />
           <button className="btn" onClick={onCancel}>

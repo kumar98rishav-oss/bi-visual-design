@@ -310,6 +310,10 @@
 .visual-box:hover { box-shadow: 0 0 0 1.5px var(--accent); }
 .visual-box.selected { box-shadow: 0 0 0 2px var(--accent), 0 6px 18px var(--accent-ring); }
 .visual-box.group { background: transparent; pointer-events: none; }
+/* Statically hidden (Selection pane / bookmark swap state): present but faded,
+   so a bookmark's alternate visual doesn't read as a solid box on top. */
+.visual-box.is-hidden { opacity: 0.18; border-style: dashed !important; }
+.visual-box.is-hidden:hover { opacity: 0.6; }
 .group-label {
   position: absolute;
   top: 3px;
@@ -600,7 +604,12 @@ input[type='color']::-webkit-color-swatch { border: none; border-radius: 4px; }
   pointer-events: none;
   user-select: none;
 }
-.truth-img.ghost { opacity: 0.5; }
+/* Ghost = reality at full strength, the editable mirror as a translucent skin
+   on top — otherwise opaque placeholder cards hide the very pixels you're
+   trying to line up against. */
+.truth-img.ghost { opacity: 0.95; }
+.page-canvas.ghost .visual-box { opacity: 0.35; }
+.page-canvas.ghost .visual-box:hover { opacity: 0.85; }
 .truth-img.truth { z-index: 5000; }
 /* In truth mode the mirror's own boxes step aside — the page IS the capture. */
 .page-canvas.truth .visual-box { visibility: hidden; }

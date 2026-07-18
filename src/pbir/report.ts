@@ -155,6 +155,7 @@ async function loadVisual(
     name: typeof raw.name === 'string' ? raw.name : visualId,
     position: readPosition(raw.position),
     visualType: typeof visual.visualType === 'string' ? visual.visualType : 'unknown',
+    isHidden: raw.isHidden === true,
     projections: readProjections(visual),
     raw,
     schema: typeof raw.$schema === 'string' ? raw.$schema : undefined,

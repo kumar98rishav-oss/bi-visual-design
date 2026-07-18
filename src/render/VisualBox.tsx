@@ -65,7 +65,7 @@ export function VisualBox({ visual, theme, selected, onSelect, rect, inert }: Pr
 
   return (
     <div
-      className={`visual-box${selected ? ' selected' : ''}${isGroup ? ' group' : ''}`}
+      className={`visual-box${selected ? ' selected' : ''}${isGroup ? ' group' : ''}${visual.isHidden ? ' is-hidden' : ''}`}
       style={style}
       onClick={(e) => {
         e.stopPropagation()

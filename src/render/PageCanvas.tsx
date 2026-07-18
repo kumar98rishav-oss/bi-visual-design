@@ -50,7 +50,7 @@ export function PageCanvas({ page, theme, scale, selectedVisualId, onSelectVisua
       onClick={() => !layoutMode && onSelectVisual(null)}
     >
       <div
-        className={`page-canvas${layoutMode ? ' layout-mode' : ''}${truth?.mode === 'truth' ? ' truth' : ''}`}
+        className={`page-canvas${layoutMode ? ' layout-mode' : ''}${truth?.mode === 'truth' ? ' truth' : ''}${truth?.mode === 'ghost' ? ' ghost' : ''}`}
         style={{
           width: page.width,
           height: page.height,

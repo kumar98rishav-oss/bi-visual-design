@@ -91,6 +91,11 @@ export interface VisualNode {
   position: VisualPosition
   /** "card", "clusteredBarChart", "slicer", "textbox", ... */
   visualType: string
+  /**
+   * Statically hidden (Selection pane / a bookmark's saved state). Rendered
+   * faded in the mirror so swap-group members don't read as solid boxes.
+   */
+  isHidden?: boolean
   /** Field bindings pulled from visual.query.queryState (best-effort). */
   projections: Projection[]
   /** The full parsed JSON, kept so we can round-trip untouched properties. */
