@@ -140,6 +140,12 @@ export interface Theme {
 export interface ReportModel {
   /** Absolute-ish label for the report (folder name), for display only. */
   reportName: string
+  /**
+   * Project-relative path of the `<name>.Report` folder (e.g. "My.Report", or
+   * "." when the user picked the .Report folder itself). Needed to CREATE new
+   * files — new visuals, generated background images.
+   */
+  reportDir: string
   pagesMeta: PagesMetadata
   /** Pages in pageOrder. */
   pages: PageNode[]

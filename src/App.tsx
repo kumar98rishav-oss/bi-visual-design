@@ -6,10 +6,16 @@ import { buildSampleFiles, SAMPLE_REPORT_NAME } from './sample/sampleReport.ts'
 import { isFileSystemAccessSupported, openProjectFolder } from './pbir/fs.ts'
 import { deployTheme } from './theme/deploy.ts'
 import { deployLayout, type LayoutEdit } from './layout/deploy.ts'
-import { alignRects, distributeRects, matchSize, type AlignEdge, type DistAxis, type MatchDim, type Rect } from './layout/geometry.ts'
+import { alignRects, bounds, distributeRects, matchSize, type AlignEdge, type DistAxis, type MatchDim, type Rect } from './layout/geometry.ts'
+import { shade } from './pbir/color.ts'
 import { analyzeReport, type DoctorRule, type Finding } from './doctor/analyze.ts'
 import { applyDoctorEdits, type DoctorEdits } from './doctor/apply.ts'
 import { deployDoctor } from './doctor/deploy.ts'
+import { buildLayers, bringForward, sendBackward, bringToFront, sendToBack, assignZ, changedZ } from './designer/layers.ts'
+import { applyDesignerEdits, panelToNode, type PendingPanel } from './designer/apply.ts'
+import { buildPanel } from './designer/shapes.ts'
+import { mintId } from './designer/ids.ts'
+import { deployDesigner, newVisualEdits, zEdits } from './designer/deploy.ts'
 import { PageCanvas } from './render/PageCanvas.tsx'
 import { Landing } from './ui/Landing.tsx'
 import { Sidebar } from './ui/Sidebar.tsx'
@@ -67,6 +73,11 @@ export default function App() {
   const [doctorEdits, setDoctorEdits] = useState<DoctorEdits>({})
   const [deployingDoctor, setDeployingDoctor] = useState(false)
 
+  // Designer (M5.1): pending panels + restacking
+  const [pendingPanels, setPendingPanels] = useState<PendingPanel[]>([])
+  const [zOverrides, setZOverrides] = useState<Record<string, number>>({})
+  const designerDirty = pendingPanels.length > 0 || Object.keys(zOverrides).length > 0
+
   const layoutDraftRef = useRef<DraftMap>({})
   const selectionRef = useRef<Set<string>>(selection)
   const histRef = useRef<Hist>(hist)
@@ -82,9 +93,15 @@ export default function App() {
 
   // Doctor fixes are applied to the model so the mirror previews them live, and
   // they become the baseline that Layout Lab and the analyzer read from.
-  const effectiveReport = useMemo(
+  // Doctor fixes form the baseline; Designer edits (panels, restacking) layer on
+  // top. Keeping them separate lets deploy diff z against the true stored value.
+  const baseReport = useMemo(
     () => (report ? applyDoctorEdits(report, doctorEdits) : null),
     [report, doctorEdits],
+  )
+  const effectiveReport = useMemo(
+    () => (baseReport ? applyDesignerEdits(baseReport, pendingPanels, zOverrides) : null),
+    [baseReport, pendingPanels, zOverrides],
   )
   const activePage = effectiveReport?.pages.find((p) => p.id === activePageId) ?? effectiveReport?.pages[0] ?? null
   const effectiveTheme = themeDraft ?? report?.theme ?? null
@@ -177,6 +194,8 @@ export default function App() {
     setHist({ stack: [{}], at: 0 })
     histRef.current = { stack: [{}], at: 0 }
     setDoctorEdits({})
+    setPendingPanels([])
+    setZOverrides({})
     setError(null)
     setNotice(null)
   }, [setDraft, setSelection])
@@ -273,6 +292,8 @@ export default function App() {
 
   const resetLayout = useCallback(() => {
     setDraft({})
+    setPendingPanels([])
+    setZOverrides({})
     const h = { stack: [{}], at: 0 }
     histRef.current = h
     setHist(h)
@@ -321,39 +342,85 @@ export default function App() {
 
   // --- Layout deploy ---
   const onDeployLayout = useCallback(async () => {
-    if (!handle || !changedEdits.length) return
+    if (!handle || (!changedEdits.length && !designerDirty)) return
     setDeployingLayout(true)
     setError(null)
     setNotice(null)
     try {
       const stamp = new Date().toISOString().replace(/[:.]/g, '-')
-      const res = await deployLayout(handle, changedEdits, stamp)
-      // Fold the deployed positions into the model as the new baseline.
+
+      // Designer edits first: newly minted panels + any restacking. Each panel
+      // gets its final z baked in from the restack map.
+      let created = 0
+      if (designerDirty && baseReport && report) {
+        const zMap = new Map(Object.entries(zOverrides))
+        const panelEdits = pendingPanels.map((p) => ({
+          id: p.id,
+          raw: {
+            ...p.raw,
+            position: { ...(p.raw.position as Record<string, unknown>), z: zMap.get(p.id) ?? 0 },
+          },
+          pageId: p.pageId,
+        }))
+        const edits = [
+          ...panelEdits.flatMap((p) => newVisualEdits(report.reportDir, p.pageId, [{ id: p.id, raw: p.raw }])),
+          ...zEdits(changedZ(baseReport.pages.flatMap((pg) => pg.visuals), zMap)),
+        ]
+        created = (await deployDesigner(handle, edits, stamp)).created
+      }
+
+      const res = changedEdits.length
+        ? await deployLayout(handle, changedEdits, stamp)
+        : { count: 0, backupDir: `.bi-visual-design-backup/${stamp}` }
+      // Fold everything deployed into the model as the new baseline: moved
+      // positions, restacked z, and the panels that now exist on disk.
       const editedById = new Map(changedEdits.map((e) => [e.visual.id, e.rect]))
+      const zMap = new Map(Object.entries(zOverrides))
+      const panelsByPage = new Map<string, PendingPanel[]>()
+      for (const p of pendingPanels) {
+        panelsByPage.set(p.pageId, [...(panelsByPage.get(p.pageId) ?? []), p])
+      }
       setReport((r) => {
         if (!r) return r
-        const pages: PageNode[] = r.pages.map((p) => ({
-          ...p,
-          visuals: p.visuals.map((v) => {
+        const pages: PageNode[] = r.pages.map((p) => {
+          const visuals = p.visuals.map((v) => {
             const rc = editedById.get(v.id)
-            if (!rc) return v
-            const position = { ...v.position, x: rc.x, y: rc.y, width: rc.w, height: rc.h }
+            const z = zMap.get(v.id)
+            if (!rc && z === undefined) return v
+            const position = {
+              ...v.position,
+              ...(rc ? { x: rc.x, y: rc.y, width: rc.w, height: rc.h } : {}),
+              ...(z !== undefined ? { z } : {}),
+            }
             return { ...v, position, raw: { ...v.raw, position } }
-          }),
-        }))
+          })
+          for (const panel of panelsByPage.get(p.id) ?? []) {
+            const z = zMap.get(panel.id) ?? 0
+            const raw = { ...panel.raw, position: { ...(panel.raw.position as Record<string, unknown>), z } }
+            visuals.push(panelToNode(r.reportDir, p.id, panel.id, raw))
+          }
+          visuals.sort((a, b) => a.position.z - b.position.z || (a.position.tabOrder ?? 0) - (b.position.tabOrder ?? 0))
+          return { ...p, visuals }
+        })
         return { ...r, pages }
       })
       setDraft({})
+      setPendingPanels([])
+      setZOverrides({})
       const h = { stack: [{}], at: 0 }
       histRef.current = h
       setHist(h)
-      setNotice(`Deployed ${res.count} visual position${res.count === 1 ? '' : 's'}. Backup at ${res.backupDir}. Close and reopen the report in Power BI Desktop to see it.`)
+      const parts = [
+        res.count ? `${res.count} position${res.count === 1 ? '' : 's'}` : '',
+        created ? `${created} new panel${created === 1 ? '' : 's'}` : '',
+      ].filter(Boolean)
+      setNotice(`Deployed ${parts.join(' + ') || 'changes'}. Backup at ${res.backupDir}. Close and reopen the report in Power BI Desktop to see it.`)
     } catch (e) {
       setError((e as Error).message)
     } finally {
       setDeployingLayout(false)
     }
-  }, [handle, changedEdits, setDraft])
+  }, [handle, changedEdits, setDraft, designerDirty, baseReport, report, pendingPanels, zOverrides])
 
   // --- Design Doctor ---
   const originalById = useMemo(() => {
@@ -404,6 +471,51 @@ export default function App() {
       setDeployingDoctor(false)
     }
   }, [handle, doctorEdits, doctorEditedCount, originalById])
+
+  // --- Designer: layers, restacking, panel minting (M5.1) ---
+  const layers = useMemo(() => (activePage ? buildLayers(activePage.visuals) : []), [activePage])
+  const layerOrder = useMemo(() => layers.map((l) => l.id), [layers])
+  const selectedLayer = selection.size === 1 ? [...selection][0] : null
+
+  /** Reassign sequential z from a back-to-front order. */
+  const restack = useCallback((order: string[]) => {
+    setZOverrides((prev) => ({ ...prev, ...Object.fromEntries(assignZ(order)) }))
+  }, [])
+
+  const onBringForwardLayer = useCallback((id: string) => restack(bringForward(layerOrder, id)), [restack, layerOrder])
+  const onSendBackwardLayer = useCallback((id: string) => restack(sendBackward(layerOrder, id)), [restack, layerOrder])
+  const onBringToFrontLayer = useCallback((id: string) => restack(bringToFront(layerOrder, id)), [restack, layerOrder])
+  const onSendToBackLayer = useCallback((id: string) => restack(sendToBack(layerOrder, id)), [restack, layerOrder])
+
+  const onAddPanel = useCallback(() => {
+    if (!activePage || !effectiveReport) return
+    const taken = new Set<string>()
+    effectiveReport.pages.forEach((p) => p.visuals.forEach((v) => taken.add(v.id)))
+    const id = mintId(taken)
+
+    // Wrap the current selection (padded) or drop a generous centred panel.
+    const sel = [...selection].map((i) => rectOf(i)).filter((r): r is Rect => !!r)
+    const PAD = 16
+    const r: Rect = sel.length
+      ? (() => {
+          const b = bounds(sel)
+          return { x: b.x - PAD, y: b.y - PAD, w: b.w + PAD * 2, h: b.h + PAD * 2 }
+        })()
+      : { x: activePage.width * 0.12, y: activePage.height * 0.12, w: activePage.width * 0.76, h: activePage.height * 0.76 }
+
+    // A panel must read as a surface against the page: nudge the page colour.
+    const pageBg = effectiveTheme?.background ?? '#FFFFFF'
+    const light = parseInt(pageBg.slice(1, 3), 16) + parseInt(pageBg.slice(3, 5), 16) + parseInt(pageBg.slice(5, 7), 16) > 382
+    const panelHex = shade(pageBg, light ? 0.05 : -0.08)
+
+    const raw = buildPanel({
+      id, x: r.x, y: r.y, width: r.w, height: r.h, z: 0,
+      fill: { kind: 'literal', hex: panelHex },
+    })
+    setPendingPanels((prev) => [...prev, { pageId: activePage.id, id, raw }])
+    restack([id, ...layerOrder]) // new panels belong at the back
+    setSelection(new Set([id]))
+  }, [activePage, effectiveReport, selection, rectOf, effectiveTheme, restack, layerOrder, setSelection])
 
   // Fit-to-viewport scaling.
   useLayoutEffect(() => {
@@ -548,8 +660,8 @@ export default function App() {
             single={singleSel}
             grid={gridSnap}
             showGrid={showGrid}
-            dirty={layoutDirty}
-            changedCount={changedEdits.length}
+            dirty={layoutDirty || designerDirty}
+            changedCount={changedEdits.length + pendingPanels.length}
             canDeploy={!!handle}
             deploying={deployingLayout}
             canUndo={hist.at > 0}
@@ -564,6 +676,14 @@ export default function App() {
             onRedo={onRedo}
             onReset={resetLayout}
             onDeploy={onDeployLayout}
+            layers={layers}
+            selectedLayer={selectedLayer}
+            onSelectLayer={(id) => setSelection(new Set([id]))}
+            onBringForward={onBringForwardLayer}
+            onSendBackward={onSendBackwardLayer}
+            onBringToFront={onBringToFrontLayer}
+            onSendToBack={onSendToBackLayer}
+            onAddPanel={onAddPanel}
           />
         ) : view === 'doctor' ? (
           <DesignDoctor

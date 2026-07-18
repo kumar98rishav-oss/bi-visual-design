@@ -4,7 +4,7 @@
 import { useMemo } from 'react'
 import type { Theme, VisualNode } from '../pbir/types.ts'
 import type { Rect } from '../layout/geometry.ts'
-import { readVisualChrome } from './formatting.ts'
+import { readShapeStyle, readVisualChrome } from './formatting.ts'
 import { PlaceholderVisual } from './PlaceholderVisual.tsx'
 
 interface Props {
@@ -22,30 +22,46 @@ const TITLE_H = 24
 
 export function VisualBox({ visual, theme, selected, onSelect, rect, inert }: Props) {
   const chrome = useMemo(() => readVisualChrome(visual, theme), [visual, theme])
+  const shape = useMemo(() => readShapeStyle(visual, theme), [visual, theme])
   const pos = rect
     ? { x: rect.x, y: rect.y, width: rect.w, height: rect.h, z: visual.position.z }
     : visual.position
   const position = pos
 
   const isGroup = visual.visualType === 'visualGroup'
-  const showTitle = !!chrome.title && chrome.title.show && chrome.title.text !== ''
+  // A shape carries no title bar and no placeholder content — it is pure fill.
+  const showTitle = !shape && !!chrome.title && chrome.title.show && chrome.title.text !== ''
   const contentH = position.height - (showTitle ? TITLE_H : 0)
 
-  const style: React.CSSProperties = {
-    left: position.x,
-    top: position.y,
-    width: position.width,
-    height: position.height,
-    zIndex: position.z,
-    pointerEvents: inert ? 'none' : undefined,
-    borderRadius: chrome.border.radius || (isGroup ? 0 : 4),
-    background: isGroup ? 'transparent' : chrome.background ?? 'var(--art-surface)',
-    border: isGroup
-      ? '1.5px dashed var(--art-group-border)'
-      : chrome.border.show
-        ? `1px solid ${chrome.border.color ?? 'var(--art-border)'}`
-        : '1px solid var(--art-border)',
-  }
+  const style: React.CSSProperties = shape
+    ? {
+        // A shape is a pure panel: its own fill, its own radius, no chrome.
+        left: position.x,
+        top: position.y,
+        width: position.width,
+        height: position.height,
+        zIndex: position.z,
+        pointerEvents: inert ? 'none' : undefined,
+        borderRadius: shape.radius,
+        background: shape.fill ?? 'var(--art-border)',
+        border: shape.stroke ? `1px solid ${shape.stroke}` : 'none',
+        boxShadow: shape.shadow ? '0 4px 14px rgba(0,0,0,0.28)' : undefined,
+      }
+    : {
+        left: position.x,
+        top: position.y,
+        width: position.width,
+        height: position.height,
+        zIndex: position.z,
+        pointerEvents: inert ? 'none' : undefined,
+        borderRadius: chrome.border.radius || (isGroup ? 0 : 4),
+        background: isGroup ? 'transparent' : chrome.background ?? 'var(--art-surface)',
+        border: isGroup
+          ? '1.5px dashed var(--art-group-border)'
+          : chrome.border.show
+            ? `1px solid ${chrome.border.color ?? 'var(--art-border)'}`
+            : '1px solid var(--art-border)',
+      }
 
   return (
     <div
@@ -74,7 +90,7 @@ export function VisualBox({ visual, theme, selected, onSelect, rect, inert }: Pr
           </span>
         </div>
       )}
-      {!isGroup && (
+      {!isGroup && !shape && (
         <div className="visual-content" style={{ height: contentH }}>
           <PlaceholderVisual visual={visual} theme={theme} width={position.width} height={contentH} />
         </div>

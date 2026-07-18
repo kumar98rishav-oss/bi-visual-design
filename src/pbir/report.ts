@@ -332,6 +332,7 @@ export async function loadReport(fp: FileProvider, reportName = 'Report'): Promi
 
   return {
     reportName,
+    reportDir,
     pagesMeta,
     pages,
     theme: await loadTheme(fp, reportDir, reportRaw),

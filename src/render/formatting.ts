@@ -85,6 +85,50 @@ export function readVisualChrome(visual: VisualNode, theme: Theme | null): Visua
   return { title, background, border }
 }
 
+export interface ShapeStyle {
+  fill?: string
+  radius: number
+  shadow: boolean
+  stroke?: string
+}
+
+/**
+ * Style for a `shape` / `basicShape` visual. These are our panel primitive, and
+ * their fill lives in `visual.objects.fill` (NOT visualContainerObjects), so
+ * they need their own reader.
+ */
+export function readShapeStyle(visual: VisualNode, theme: Theme | null): ShapeStyle | null {
+  if (visual.visualType !== 'shape' && visual.visualType !== 'basicShape') return null
+  const v = isObj(visual.raw.visual) ? visual.raw.visual : {}
+  const objects = isObj(v.objects) ? v.objects : {}
+
+  const fillProps = firstProps(objects.fill)
+  const fill = fillProps ? resolveColor(readColor(fillProps.fillColor), theme) : undefined
+
+  const shapeProps = firstProps(objects.shape)
+  const tile = shapeProps ? readLiteral(shapeProps.tileShape) : undefined
+  // Power BI implies the corner radius from the tile shape rather than storing
+  // it; 12px reads true to how Desktop draws a rounded rectangle.
+  const rounded = typeof tile === 'string' && tile.toLowerCase().includes('rounded')
+
+  // Legacy basicShape keeps its radius explicitly on `line.roundEdge`.
+  const lineProps = firstProps(objects.line)
+  const roundEdge = lineProps ? readLiteral(lineProps.roundEdge) : undefined
+
+  const outlineProps = firstProps(objects.outline)
+  const stroke = outlineProps ? resolveColor(readColor(outlineProps.lineColor), theme) : undefined
+
+  const shadowProps = firstProps(objects.shadow)
+  const shadow = shadowProps ? readLiteral(shadowProps.show) === true : false
+
+  return {
+    fill,
+    radius: typeof roundEdge === 'number' ? roundEdge : rounded ? 12 : 0,
+    shadow,
+    stroke,
+  }
+}
+
 export interface PageChrome {
   background?: string
   /** 0..100 transparency of the background fill, if specified. */

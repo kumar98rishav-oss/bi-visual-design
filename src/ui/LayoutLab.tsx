@@ -2,9 +2,11 @@ import {
   AlignStartVertical, AlignCenterVertical, AlignEndVertical,
   AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal,
   AlignHorizontalSpaceAround, AlignVerticalSpaceAround,
-  Undo2, Redo2,
+  Undo2, Redo2, SquarePlus,
 } from 'lucide-react'
 import type { AlignEdge, DistAxis, MatchDim, Rect } from '../layout/geometry.ts'
+import type { Layer } from '../designer/layers.ts'
+import { LayersPanel } from './LayersPanel.tsx'
 
 interface Props {
   selectionCount: number
@@ -27,6 +29,15 @@ interface Props {
   onRedo: () => void
   onReset: () => void
   onDeploy: () => void
+  // --- Layers (M5.1) ---
+  layers: Layer[]
+  selectedLayer: string | null
+  onSelectLayer: (id: string) => void
+  onBringForward: (id: string) => void
+  onSendBackward: (id: string) => void
+  onBringToFront: (id: string) => void
+  onSendToBack: (id: string) => void
+  onAddPanel: () => void
 }
 
 function Num({ label, value, onChange }: { label: string; value: number; onChange: (n: number) => void }) {
@@ -50,6 +61,7 @@ export function LayoutLab(props: Props) {
     selectionCount, single, grid, showGrid, dirty, changedCount, canDeploy, deploying,
     canUndo, canRedo, onSetRect, onAlign, onDistribute, onMatch, onToggleGrid, onToggleShowGrid,
     onUndo, onRedo, onReset, onDeploy,
+    layers, selectedLayer, onSelectLayer, onBringForward, onSendBackward, onBringToFront, onSendToBack, onAddPanel,
   } = props
 
   const multi = selectionCount >= 2
@@ -64,7 +76,7 @@ export function LayoutLab(props: Props) {
             {selectionCount === 0 ? 'Nothing selected' : `${selectionCount} selected`}
           </div>
         </div>
-        {dirty && <span className="tl-dirty" title="Unsaved position edits">● {changedCount} moved</span>}
+        {dirty && <span className="tl-dirty" title="Unsaved layout edits">● {changedCount} pending</span>}
       </div>
 
       <section className="tl-section">
@@ -113,6 +125,24 @@ export function LayoutLab(props: Props) {
           <button className="btn small" disabled={!multi} onClick={() => onMatch('height')}>Height</button>
           <button className="btn small" disabled={!multi} onClick={() => onMatch('both')}>Both</button>
         </div>
+      </section>
+
+      <section className="tl-section">
+        <div className="tl-section-head">
+          Layers <span className="tl-count">{layers.length}</span>
+          <button className="doc-groupfix" onClick={onAddPanel} title="Add a rounded panel behind everything">
+            <SquarePlus size={12} /> Add panel
+          </button>
+        </div>
+        <LayersPanel
+          layers={layers}
+          selected={selectedLayer}
+          onSelect={onSelectLayer}
+          onBringForward={onBringForward}
+          onSendBackward={onSendBackward}
+          onBringToFront={onBringToFront}
+          onSendToBack={onSendToBack}
+        />
       </section>
 
       <section className="tl-section">
